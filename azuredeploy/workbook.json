@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location":      { "type": "string", "defaultValue": "[resourceGroup().location]" },
+    "workspaceId":   { "type": "string" },
+    "workspaceName": { "type": "string" },
+    "workbookDisplayName": { "type": "string", "defaultValue": "Freshservice Sync Status" },
+    "workbookId": {
+      "type": "string",
+      "defaultValue": "[newGuid()]",
+      "metadata": { "description": "Unique GUID for this workbook instance." }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Insights/workbooks",
+      "apiVersion": "2022-04-01",
+      "name": "[parameters('workbookId')]",
+      "location": "[parameters('location')]",
+      "kind": "shared",
+      "properties": {
+        "displayName": "[parameters('workbookDisplayName')]",
+        "category": "sentinel",
+        "sourceId": "[parameters('workspaceId')]",
+        "serializedData": "{\"version\":\"Notebook/1.0\",\"items\":[{\"type\":1,\"content\":{\"json\":\"## Freshservice Sync Status\\n\\nMonitors bidirectional sync between Microsoft Sentinel and Freshservice.\"},\"name\":\"header\"},{\"type\":9,\"content\":{\"version\":\"KqlParameterItem/1.0\",\"parameters\":[{\"id\":\"timerange\",\"version\":\"KqlParameterItem/1.0\",\"name\":\"TimeRange\",\"type\":4,\"value\":{\"durationMs\":86400000},\"typeSettings\":{\"selectableValues\":[{\"durationMs\":3600000},{\"durationMs\":86400000},{\"durationMs\":604800000}]}}]},\"name\":\"parameters\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityIncident\\n| where TimeGenerated {TimeRange}\\n| summarize Total=count(), Synced=countif(Labels has 'fs-ticket-'), Unsynced=countif(not(Labels has 'fs-ticket-'))\\n| extend SyncRate=strcat(round(100.0*Synced/Total,1),'%')\",\"size\":4,\"title\":\"Sync Coverage\",\"queryType\":0,\"visualization\":\"tiles\"},\"name\":\"coverage\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityIncident\\n| where TimeGenerated {TimeRange}\\n| summarize Count=count() by Severity, bin(TimeGenerated,1h)\\n| order by TimeGenerated desc\",\"size\":0,\"title\":\"Incidents by Severity\",\"queryType\":0,\"visualization\":\"barchart\"},\"name\":\"severity-chart\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityIncident\\n| where TimeGenerated {TimeRange}\\n| where Labels has 'fs-ticket-'\\n| extend FsTicketId=extract('fs-ticket-([0-9]+)',1,tostring(Labels))\\n| project IncidentNumber, Title, Severity, Status, FsTicketId, CreatedTime, LastModifiedTime\\n| order by LastModifiedTime desc\\n| take 100\",\"size\":0,\"title\":\"Synced Incidents\",\"queryType\":0,\"visualization\":\"table\"},\"name\":\"synced-table\"},{\"type\":3,\"content\":{\"version\":\"KqlItem/1.0\",\"query\":\"SecurityIncident\\n| where TimeGenerated {TimeRange}\\n| where Status=='Closed'\\n| summarize ClosedBySentinel=countif(not(Labels has 'fs-ticket-')), ClosedViaFS=countif(Labels has 'fs-ticket-')\",\"size\":4,\"title\":\"Closure Source (24h)\",\"queryType\":0,\"visualization\":\"piechart\"},\"name\":\"closure-pie\"}],\"styleSettings\":{},\"$schema\":\"https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json\"}"
+      }
+    }
+  ],
+  "outputs": {
+    "workbookId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Insights/workbooks', parameters('workbookId'))]"
+    }
+  }
+}

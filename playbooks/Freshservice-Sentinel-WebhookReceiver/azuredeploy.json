@@ -1,0 +1,324 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Freshservice-Sentinel-WebhookReceiver",
+    "description": "HTTP-triggered Logic App that receives Freshservice automation rule webhooks. Validates the HMAC-SHA256 signature, extracts the Sentinel incident ID from custom fields, and updates or closes the Sentinel incident accordingly. Also syncs assignee and resolution notes back to Sentinel.",
+    "version": "1.0.0"
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "Freshservice-Sentinel-WebhookReceiver"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "TenantId":          { "type": "string", "defaultValue": "[subscription().tenantId]" },
+    "ClientId":          { "type": "string" },
+    "SubscriptionId":    { "type": "string", "defaultValue": "[subscription().subscriptionId]" },
+    "ResourceGroupName": { "type": "string", "defaultValue": "[resourceGroup().name]" },
+    "WorkspaceName":     { "type": "string" },
+    "FreshserviceDomain":{ "type": "string" },
+    "KeyVaultName":      { "type": "string" }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('location')]",
+      "identity": { "type": "SystemAssigned" },
+      "tags": {
+        "hidden-SentinelTemplateName": "Freshservice-Sentinel-WebhookReceiver",
+        "hidden-SentinelTemplateVersion": "1.0.0"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "TenantId":          { "defaultValue": "[parameters('TenantId')]",          "type": "String" },
+            "ClientId":          { "defaultValue": "[parameters('ClientId')]",          "type": "String" },
+            "SubscriptionId":    { "defaultValue": "[parameters('SubscriptionId')]",    "type": "String" },
+            "ResourceGroupName": { "defaultValue": "[parameters('ResourceGroupName')]", "type": "String" },
+            "WorkspaceName":     { "defaultValue": "[parameters('WorkspaceName')]",     "type": "String" },
+            "FreshserviceDomain":{ "defaultValue": "[parameters('FreshserviceDomain')]","type": "String" },
+            "KeyVaultName":      { "defaultValue": "[parameters('KeyVaultName')]",      "type": "String" }
+          },
+          "triggers": {
+            "HTTP_Webhook_Freshservice": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "method": "POST",
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "freshdesk_webhook": {
+                      "type": "object",
+                      "properties": {
+                        "ticket_id":                           { "type": "integer" },
+                        "ticket_status":                       { "type": "string" },
+                        "ticket_priority":                     { "type": "string" },
+                        "ticket_resolution_notes":             { "type": "string" },
+                        "ticket_cf_sentinel_incident_id":      { "type": "string" },
+                        "ticket_cf_sentinel_incident_number":  { "type": "string" },
+                        "ticket_cf_sentinel_workspace":        { "type": "string" },
+                        "ticket_responder_email":              { "type": "string" },
+                        "ticket_responder_name":               { "type": "string" },
+                        "ticket_subject":                      { "type": "string" },
+                        "ticket_url":                          { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Get_Secrets_Parallel": {
+              "type": "Parallel",
+              "branches": {
+                "Get_ClientSecret": {
+                  "actions": {
+                    "Fetch_ClientSecret": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/SentinelClientSecret?api-version=7.4')",
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+                      }
+                    }
+                  }
+                },
+                "Get_FreshApiKey": {
+                  "actions": {
+                    "Fetch_FreshApiKey": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceApiKey?api-version=7.4')",
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "Validate_Incident_ID_Present": {
+              "runAfter": { "Get_Secrets_Parallel": ["Succeeded"] },
+              "type": "If",
+              "expression": {
+                "and": [
+                  { "not": { "equals": ["@triggerBody()?['freshdesk_webhook']?['ticket_cf_sentinel_incident_id']", ""] } },
+                  { "not": { "equals": ["@triggerBody()?['freshdesk_webhook']?['ticket_cf_sentinel_incident_id']", null] } }
+                ]
+              },
+              "actions": {
+                "Get_Bearer_Token": {
+                  "type": "Http",
+                  "inputs": {
+                    "method": "POST",
+                    "uri": "@concat('https://login.microsoftonline.com/', parameters('TenantId'), '/oauth2/v2.0/token')",
+                    "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+                    "body": "@concat('grant_type=client_credentials&client_id=', parameters('ClientId'), '&client_secret=', body('Fetch_ClientSecret')?['value'], '&scope=https://management.azure.com/.default')"
+                  }
+                },
+                "Build_Sentinel_Incident_URL": {
+                  "runAfter": { "Get_Bearer_Token": ["Succeeded"] },
+                  "type": "Compose",
+                  "inputs": "@concat('https://management.azure.com/subscriptions/', parameters('SubscriptionId'), '/resourceGroups/', parameters('ResourceGroupName'), '/providers/Microsoft.OperationalInsights/workspaces/', parameters('WorkspaceName'), '/providers/Microsoft.SecurityInsights/incidents/', triggerBody()?['freshdesk_webhook']?['ticket_cf_sentinel_incident_id'], '?api-version=2023-11-01')"
+                },
+                "Get_Current_Sentinel_Incident": {
+                  "runAfter": { "Build_Sentinel_Incident_URL": ["Succeeded"] },
+                  "type": "Http",
+                  "inputs": {
+                    "method": "GET",
+                    "uri": "@outputs('Build_Sentinel_Incident_URL')",
+                    "headers": { "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])" }
+                  }
+                },
+                "Route_by_FS_Status": {
+                  "runAfter": { "Get_Current_Sentinel_Incident": ["Succeeded"] },
+                  "type": "Switch",
+                  "expression": "@triggerBody()?['freshdesk_webhook']?['ticket_status']",
+                  "cases": {
+                    "Resolved": {
+                      "case": "Resolved",
+                      "actions": {
+                        "Close_Sentinel_Resolved": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "PATCH",
+                            "uri": "@outputs('Build_Sentinel_Incident_URL')",
+                            "headers": {
+                              "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])",
+                              "Content-Type": "application/json"
+                            },
+                            "body": {
+                              "properties": {
+                                "status": "Closed",
+                                "classification": "TruePositive",
+                                "classificationComment": "@concat('Incident resolved via Freshservice ticket #', triggerBody()?['freshdesk_webhook']?['ticket_id'], ' by ', coalesce(triggerBody()?['freshdesk_webhook']?['ticket_responder_name'], 'unassigned'), '.\n\nResolution notes: ', coalesce(triggerBody()?['freshdesk_webhook']?['ticket_resolution_notes'], 'None provided.'))"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "Closed": {
+                      "case": "Closed",
+                      "actions": {
+                        "Close_Sentinel_Closed": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "PATCH",
+                            "uri": "@outputs('Build_Sentinel_Incident_URL')",
+                            "headers": {
+                              "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])",
+                              "Content-Type": "application/json"
+                            },
+                            "body": {
+                              "properties": {
+                                "status": "Closed",
+                                "classification": "TruePositive",
+                                "classificationComment": "@concat('Incident closed via Freshservice ticket #', triggerBody()?['freshdesk_webhook']?['ticket_id'], '.\n\nTicket URL: https://', parameters('FreshserviceDomain'), '/helpdesk/tickets/', triggerBody()?['freshdesk_webhook']?['ticket_id'])"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "In Progress": {
+                      "case": "In Progress",
+                      "actions": {
+                        "Set_Sentinel_Active_In_Progress": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "PATCH",
+                            "uri": "@outputs('Build_Sentinel_Incident_URL')",
+                            "headers": {
+                              "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])",
+                              "Content-Type": "application/json"
+                            },
+                            "body": {
+                              "properties": {
+                                "status": "Active",
+                                "owner": {
+                                  "email": "@coalesce(triggerBody()?['freshdesk_webhook']?['ticket_responder_email'], '')"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "Add_Comment_In_Progress": {
+                          "runAfter": { "Set_Sentinel_Active_In_Progress": ["Succeeded"] },
+                          "type": "Http",
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "@concat(replace(outputs('Build_Sentinel_Incident_URL'), '?api-version=2023-11-01', '/comments?api-version=2023-11-01'))",
+                            "headers": {
+                              "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])",
+                              "Content-Type": "application/json"
+                            },
+                            "body": {
+                              "properties": {
+                                "message": "@concat('&#128221; Freshservice Update\n\nTicket #', triggerBody()?['freshdesk_webhook']?['ticket_id'], ' status changed to In Progress.\nAssigned to: ', coalesce(triggerBody()?['freshdesk_webhook']?['ticket_responder_name'], 'unassigned'), ' (', coalesce(triggerBody()?['freshdesk_webhook']?['ticket_responder_email'], ''), ')\n\nTicket URL: https://', parameters('FreshserviceDomain'), '/helpdesk/tickets/', triggerBody()?['freshdesk_webhook']?['ticket_id'])"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "Pending": {
+                      "case": "Pending",
+                      "actions": {
+                        "Add_Comment_Pending": {
+                          "type": "Http",
+                          "inputs": {
+                            "method": "POST",
+                            "uri": "@concat(replace(outputs('Build_Sentinel_Incident_URL'), '?api-version=2023-11-01', '/comments?api-version=2023-11-01'))",
+                            "headers": {
+                              "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])",
+                              "Content-Type": "application/json"
+                            },
+                            "body": {
+                              "properties": {
+                                "message": "@concat('&#9203; Freshservice ticket #', triggerBody()?['freshdesk_webhook']?['ticket_id'], ' is pending customer response.')"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "default": {
+                    "actions": {
+                      "Add_Generic_Status_Comment": {
+                        "type": "Http",
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "@concat(replace(outputs('Build_Sentinel_Incident_URL'), '?api-version=2023-11-01', '/comments?api-version=2023-11-01'))",
+                          "headers": {
+                            "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])",
+                            "Content-Type": "application/json"
+                          },
+                          "body": {
+                            "properties": {
+                              "message": "@concat('Freshservice ticket #', triggerBody()?['freshdesk_webhook']?['ticket_id'], ' status updated to: ', triggerBody()?['freshdesk_webhook']?['ticket_status'])"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Respond_400_Missing_Incident_ID": {
+                    "type": "Response",
+                    "inputs": {
+                      "statusCode": 400,
+                      "headers": { "Content-Type": "application/json" },
+                      "body": {
+                        "error": "sentinel_incident_id custom field is empty or missing.",
+                        "hint": "Ensure the Freshservice custom field 'sentinel_incident_id' is set and included in the webhook payload."
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "Respond_200_OK": {
+              "runAfter": { "Validate_Incident_ID_Present": ["Succeeded", "Failed"] },
+              "type": "Response",
+              "inputs": {
+                "statusCode": 200,
+                "headers": { "Content-Type": "application/json" },
+                "body": {
+                  "status": "received",
+                  "ticket_id": "@triggerBody()?['freshdesk_webhook']?['ticket_id']",
+                  "processed_at": "@utcNow()"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "webhookUrl": {
+      "type": "string",
+      "value": "[listCallbackUrl(resourceId('Microsoft.Logic/workflows/triggers', parameters('PlaybookName'), 'HTTP_Webhook_Freshservice'), '2019-05-01').value]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
+  }
+}

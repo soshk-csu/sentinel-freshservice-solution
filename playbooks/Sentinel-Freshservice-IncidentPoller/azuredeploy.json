@@ -1,0 +1,207 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Sentinel-Freshservice-IncidentPoller",
+    "description": "Polls Microsoft Sentinel for new and updated incidents on a configurable schedule and creates or updates corresponding Freshservice tickets. Acts as the fallback sync mechanism alongside the event-driven trigger playbook.",
+    "version": "1.0.0"
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "Sentinel-Freshservice-IncidentPoller"
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "TenantId": { "type": "string" },
+    "ClientId": { "type": "string" },
+    "SubscriptionId": { "type": "string", "defaultValue": "[subscription().subscriptionId]" },
+    "ResourceGroupName": { "type": "string", "defaultValue": "[resourceGroup().name]" },
+    "WorkspaceName": { "type": "string" },
+    "FreshserviceDomain": { "type": "string" },
+    "KeyVaultName": { "type": "string" },
+    "PollingFrequencyMinutes": { "type": "int", "defaultValue": 5 },
+    "IncidentFilter": {
+      "type": "string",
+      "defaultValue": "properties/status eq 'Active'",
+      "metadata": { "description": "OData filter applied to Sentinel incidents. Default: only Active incidents." }
+    },
+    "IncidentMaxAgeDays": {
+      "type": "int",
+      "defaultValue": 7,
+      "metadata": { "description": "Maximum age in days of incidents to sync. Prevents processing of very old incidents." }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('location')]",
+      "identity": { "type": "SystemAssigned" },
+      "tags": {
+        "hidden-SentinelTemplateName": "Sentinel-Freshservice-IncidentPoller",
+        "hidden-SentinelTemplateVersion": "1.0.0"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "TenantId": { "defaultValue": "[parameters('TenantId')]", "type": "String" },
+            "ClientId": { "defaultValue": "[parameters('ClientId')]", "type": "String" },
+            "SubscriptionId": { "defaultValue": "[parameters('SubscriptionId')]", "type": "String" },
+            "ResourceGroupName": { "defaultValue": "[parameters('ResourceGroupName')]", "type": "String" },
+            "WorkspaceName": { "defaultValue": "[parameters('WorkspaceName')]", "type": "String" },
+            "FreshserviceDomain": { "defaultValue": "[parameters('FreshserviceDomain')]", "type": "String" },
+            "KeyVaultName": { "defaultValue": "[parameters('KeyVaultName')]", "type": "String" },
+            "IncidentFilter": { "defaultValue": "[parameters('IncidentFilter')]", "type": "String" },
+            "IncidentMaxAgeDays": { "defaultValue": "[parameters('IncidentMaxAgeDays')]", "type": "Int" }
+          },
+          "triggers": {
+            "Recurrence_Poll_Sentinel": {
+              "type": "Recurrence",
+              "recurrence": {
+                "frequency": "Minute",
+                "interval": "[parameters('PollingFrequencyMinutes')]"
+              }
+            }
+          },
+          "actions": {
+            "Get_Secrets_from_KeyVault": {
+              "type": "Parallel",
+              "branches": {
+                "Get_ClientSecret": {
+                  "actions": {
+                    "Fetch_ClientSecret": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/SentinelClientSecret?api-version=7.4')",
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+                      }
+                    }
+                  }
+                },
+                "Get_FreshApiKey": {
+                  "actions": {
+                    "Fetch_FreshApiKey": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceApiKey?api-version=7.4')",
+                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "Get_Bearer_Token": {
+              "runAfter": { "Get_Secrets_from_KeyVault": ["Succeeded"] },
+              "type": "Http",
+              "inputs": {
+                "method": "POST",
+                "uri": "@concat('https://login.microsoftonline.com/', parameters('TenantId'), '/oauth2/v2.0/token')",
+                "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+                "body": "@concat('grant_type=client_credentials&client_id=', parameters('ClientId'), '&client_secret=', body('Fetch_ClientSecret')?['value'], '&scope=https://management.azure.com/.default')"
+              }
+            },
+            "Compute_Last_Poll_Time": {
+              "runAfter": { "Get_Bearer_Token": ["Succeeded"] },
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  {
+                    "name": "lastPollTime",
+                    "type": "string",
+                    "value": "@{addMinutes(utcNow(), -6)}"
+                  }
+                ]
+              }
+            },
+            "List_New_and_Updated_Incidents": {
+              "runAfter": { "Compute_Last_Poll_Time": ["Succeeded"] },
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://management.azure.com/subscriptions/', parameters('SubscriptionId'), '/resourceGroups/', parameters('ResourceGroupName'), '/providers/Microsoft.OperationalInsights/workspaces/', parameters('WorkspaceName'), '/providers/Microsoft.SecurityInsights/incidents?api-version=2023-11-01&$filter=', parameters('IncidentFilter'), ' and properties/lastModifiedTimeUtc ge ', variables('lastPollTime'), '&$orderby=properties/lastModifiedTimeUtc desc&$top=100')",
+                "headers": {
+                  "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])"
+                }
+              }
+            },
+            "For_Each_Incident": {
+              "runAfter": { "List_New_and_Updated_Incidents": ["Succeeded"] },
+              "type": "Foreach",
+              "foreach": "@body('List_New_and_Updated_Incidents')?['value']",
+              "actions": {
+                "Check_If_FS_Ticket_Tag_Exists": {
+                  "type": "If",
+                  "expression": {
+                    "contains": ["@string(item()?['properties']?['labels'])", "fs-ticket-"]
+                  },
+                  "actions": {
+                    "Extract_FS_Ticket_ID": {
+                      "type": "Compose",
+                      "inputs": "@replace(first(filter(item()?['properties']?['labels'], @equals(startsWith(item()?['displayName'], 'fs-ticket-'), true)))?['displayName'], 'fs-ticket-', '')"
+                    },
+                    "Update_Existing_FS_Ticket": {
+                      "runAfter": { "Extract_FS_Ticket_ID": ["Succeeded"] },
+                      "type": "Http",
+                      "inputs": {
+                        "method": "PATCH",
+                        "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets/', outputs('Extract_FS_Ticket_ID'))",
+                        "headers": {
+                          "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))",
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "custom_fields": {
+                            "sentinel_severity": "@item()?['properties']?['severity']"
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "else": {
+                    "actions": {
+                      "Create_New_FS_Ticket_for_Incident": {
+                        "type": "Http",
+                        "inputs": {
+                          "method": "POST",
+                          "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets')",
+                          "headers": {
+                            "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))",
+                            "Content-Type": "application/json"
+                          },
+                          "body": {
+                            "subject": "@concat('[SENTINEL-', item()?['properties']?['incidentNumber'], '] ', item()?['properties']?['title'])",
+                            "description": "@concat('<b>Sentinel Incident (Poller sync)</b><br><b>Severity:</b> ', item()?['properties']?['severity'], '<br><b>Incident URL:</b> <a href=\"', item()?['properties']?['incidentUrl'], '\">', item()?['properties']?['incidentUrl'], '</a><br><br>', item()?['properties']?['description'])",
+                            "email": "soc-automation@yourcompany.com",
+                            "priority": 3,
+                            "status": 2,
+                            "type": "Incident",
+                            "tags": ["sentinel", "poller-sync"],
+                            "custom_fields": {
+                              "sentinel_incident_id": "@item()?['name']",
+                              "sentinel_incident_number": "@item()?['properties']?['incidentNumber']",
+                              "sentinel_severity": "@item()?['properties']?['severity']"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

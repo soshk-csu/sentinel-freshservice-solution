@@ -1,0 +1,190 @@
+{
+  "_description": "Freshservice Workflow Automator configuration reference for the Microsoft Sentinel bidirectional connector. Import or recreate these rules in Admin > Workflow Automator.",
+  "_version": "1.0.0",
+
+  "automator_rules": [
+    {
+      "rule_name": "Sentinel Connector — Ticket Status to Sentinel",
+      "description": "Fires whenever a Sentinel-linked ticket changes status. Sends the update to the Logic App webhook receiver which syncs the change back to the Sentinel incident.",
+      "active": true,
+      "event": {
+        "object": "ticket",
+        "action": "update"
+      },
+      "conditions": {
+        "match_type": "ALL",
+        "conditions": [
+          {
+            "field": "ticket.cf.sentinel_incident_id",
+            "operator": "is_not_empty"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action_type": "trigger_webhook",
+          "config": {
+            "request_type": "POST",
+            "url": "{{WEBHOOK_RECEIVER_URL}}",
+            "content_type": "application/json",
+            "auth_type": "none",
+            "custom_headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "freshdesk_webhook": {
+                "ticket_id":                          "{{ticket.id}}",
+                "ticket_status":                      "{{ticket.status}}",
+                "ticket_priority":                    "{{ticket.priority}}",
+                "ticket_subject":                     "{{ticket.subject}}",
+                "ticket_resolution_notes":            "{{ticket.resolution_notes}}",
+                "ticket_cf_sentinel_incident_id":     "{{ticket.cf.sentinel_incident_id}}",
+                "ticket_cf_sentinel_incident_number": "{{ticket.cf.sentinel_incident_number}}",
+                "ticket_cf_sentinel_workspace":       "{{ticket.cf.sentinel_workspace}}",
+                "ticket_responder_email":             "{{ticket.agent.email}}",
+                "ticket_responder_name":              "{{ticket.agent.name}}",
+                "ticket_url":                         "{{ticket.url}}",
+                "ticket_updated_at":                  "{{ticket.updated_at}}"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rule_name": "Sentinel Connector — New Note to Sentinel Comment",
+      "description": "Fires when a public note is added to a Sentinel-linked ticket. Mirrors the note as a comment on the Sentinel incident.",
+      "active": true,
+      "event": {
+        "object": "ticket",
+        "action": "note_added"
+      },
+      "conditions": {
+        "match_type": "ALL",
+        "conditions": [
+          {
+            "field": "ticket.cf.sentinel_incident_id",
+            "operator": "is_not_empty"
+          },
+          {
+            "field": "note.private",
+            "operator": "is",
+            "value": "false"
+          }
+        ]
+      },
+      "actions": [
+        {
+          "action_type": "trigger_webhook",
+          "config": {
+            "request_type": "POST",
+            "url": "{{WEBHOOK_RECEIVER_URL}}",
+            "content_type": "application/json",
+            "body": {
+              "freshdesk_webhook": {
+                "event_type":                         "note_added",
+                "ticket_id":                          "{{ticket.id}}",
+                "ticket_cf_sentinel_incident_id":     "{{ticket.cf.sentinel_incident_id}}",
+                "note_body":                          "{{note.body}}",
+                "note_author":                        "{{note.author.name}}",
+                "note_created_at":                    "{{note.created_at}}"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+
+  "custom_fields": {
+    "_description": "These fields must be added to the Incident ticket type under Admin > Ticket Fields before deploying.",
+    "fields": [
+      {
+        "label": "Sentinel Incident ID",
+        "name": "sentinel_incident_id",
+        "type": "custom_text",
+        "required": false,
+        "visible_in_portal": false,
+        "description": "Full Azure resource ID of the linked Microsoft Sentinel incident. Set automatically by the connector. Do not edit manually."
+      },
+      {
+        "label": "Sentinel Incident Number",
+        "name": "sentinel_incident_number",
+        "type": "custom_number",
+        "required": false,
+        "visible_in_portal": false,
+        "description": "Human-readable Sentinel incident number (integer). Used for display and deduplication."
+      },
+      {
+        "label": "Sentinel Severity",
+        "name": "sentinel_severity",
+        "type": "custom_dropdown",
+        "required": false,
+        "visible_in_portal": true,
+        "choices": ["High", "Medium", "Low", "Informational"],
+        "description": "Original severity from Microsoft Sentinel. Reflects the Sentinel alert severity at time of ticket creation."
+      },
+      {
+        "label": "Sentinel Workspace",
+        "name": "sentinel_workspace",
+        "type": "custom_text",
+        "required": false,
+        "visible_in_portal": false,
+        "description": "Name of the Microsoft Sentinel workspace that generated this incident."
+      }
+    ]
+  },
+
+  "field_mapping": {
+    "_description": "Complete field mapping between Sentinel incident properties and Freshservice ticket fields.",
+    "sentinel_to_freshservice": [
+      { "sentinel_field": "properties.title",                              "fs_field": "subject",                         "transform": "prefix with [SENTINEL-{incidentNumber}] " },
+      { "sentinel_field": "properties.description",                        "fs_field": "description (HTML)",              "transform": "Wrapped in formatted HTML table with all incident metadata" },
+      { "sentinel_field": "properties.severity == High",                   "fs_field": "priority",                        "transform": "2 (Urgent)" },
+      { "sentinel_field": "properties.severity == Medium",                  "fs_field": "priority",                        "transform": "3 (High)" },
+      { "sentinel_field": "properties.severity == Low",                     "fs_field": "priority",                        "transform": "4 (Medium)" },
+      { "sentinel_field": "properties.severity == Informational",           "fs_field": "priority",                        "transform": "4 (Medium)" },
+      { "sentinel_field": "properties.status == Active",                    "fs_field": "status",                          "transform": "2 (Open)" },
+      { "sentinel_field": "properties.name",                               "fs_field": "custom_fields.sentinel_incident_id",         "transform": "Direct copy" },
+      { "sentinel_field": "properties.incidentNumber",                     "fs_field": "custom_fields.sentinel_incident_number",     "transform": "Direct copy" },
+      { "sentinel_field": "properties.severity",                           "fs_field": "custom_fields.sentinel_severity",            "transform": "Direct copy" },
+      { "sentinel_field": "workspaceName (parameter)",                     "fs_field": "custom_fields.sentinel_workspace",           "transform": "Direct copy" },
+      { "sentinel_field": "properties.relatedEntities[].kind + friendlyName", "fs_field": "description (entity list)",    "transform": "HTML <ul> list appended to description" },
+      { "sentinel_field": "properties.additionalData.alertProductNames[]", "fs_field": "tags[]",                          "transform": "Each product added as a tag" },
+      { "sentinel_field": "properties.incidentNumber",                     "fs_field": "tags[]",                          "transform": "sentinel-inc-{number}" },
+      { "sentinel_field": "properties.severity (lowercased)",              "fs_field": "tags[]",                          "transform": "severity-{high|medium|low|informational}" }
+    ],
+    "freshservice_to_sentinel": [
+      { "fs_field": "status == Resolved (4)",                "sentinel_field": "properties.status",               "transform": "Closed" },
+      { "fs_field": "status == Closed (5)",                  "sentinel_field": "properties.status",               "transform": "Closed" },
+      { "fs_field": "status == In Progress (3)",             "sentinel_field": "properties.status",               "transform": "Active + comment added" },
+      { "fs_field": "status == Pending (6)",                 "sentinel_field": "properties.status",               "transform": "Active + comment added" },
+      { "fs_field": "ticket_resolution_notes",               "sentinel_field": "properties.classificationComment","transform": "Appended to close comment" },
+      { "fs_field": "ticket_responder_email",                "sentinel_field": "properties.owner.email",          "transform": "Direct copy on In Progress event" },
+      { "fs_field": "note.body (public notes)",              "sentinel_field": "incidents/{id}/comments",         "transform": "Posted as Sentinel incident comment" }
+    ]
+  },
+
+  "severity_priority_mapping": {
+    "_description": "Complete severity/priority/status mapping tables.",
+    "sentinel_to_fs_priority": {
+      "High":          { "fs_priority": 2, "label": "Urgent" },
+      "Medium":        { "fs_priority": 3, "label": "High" },
+      "Low":           { "fs_priority": 4, "label": "Medium" },
+      "Informational": { "fs_priority": 4, "label": "Medium" }
+    },
+    "fs_status_to_sentinel_status": {
+      "2":  { "label": "Open",        "sentinel_status": "Active",  "action": "No change" },
+      "3":  { "label": "Pending",     "sentinel_status": "Active",  "action": "Add comment" },
+      "4":  { "label": "Resolved",    "sentinel_status": "Closed",  "action": "Close + TruePositive + resolution notes" },
+      "5":  { "label": "Closed",      "sentinel_status": "Closed",  "action": "Close + TruePositive" },
+      "6":  { "label": "In Progress", "sentinel_status": "Active",  "action": "Add comment + update owner" }
+    },
+    "fs_priority_values": {
+      "1": "Low",
+      "2": "Medium",
+      "3": "High",
+      "4": "Urgent"
+    }
+  }
+}

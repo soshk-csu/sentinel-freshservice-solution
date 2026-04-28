@@ -1,0 +1,214 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Microsoft Sentinel Solution for Freshservice — Orchestrator",
+    "description": "Master linked deployment. Deploys Key Vault → all 4 Logic App playbooks → RBAC assignments → Automation Rules → Workbook in the correct dependency order.",
+    "version": "1.0.0"
+  },
+  "parameters": {
+    "location":              { "type": "string", "defaultValue": "[resourceGroup().location]" },
+    "workspaceName":         { "type": "string" },
+    "workspaceId":           { "type": "string" },
+    "clientId":              { "type": "string" },
+    "clientSecret":          { "type": "securestring" },
+    "freshserviceDomain":    { "type": "string" },
+    "freshserviceApiKey":    { "type": "securestring" },
+    "defaultRequesterEmail": { "type": "string", "defaultValue": "soc-automation@yourcompany.com" },
+    "defaultGroupId":        { "type": "int",    "defaultValue": 0 },
+    "keyVaultName":          { "type": "string" },
+    "deployerObjectId":      { "type": "string", "metadata": { "description": "Object ID of the deploying user for Key Vault Administrator role." } },
+    "syncOnSeverity":        { "type": "array",  "defaultValue": ["High", "Medium"] },
+    "incidentTagFilter":     { "type": "string", "defaultValue": "" },
+    "pollingIntervalMinutes":{ "type": "int",    "defaultValue": 5 },
+    "commentSyncIntervalMinutes": { "type": "int", "defaultValue": 10 },
+    "baseTemplateUri": {
+      "type": "string",
+      "defaultValue": "https://raw.githubusercontent.com/your-org/sentinel-freshservice-solution/main",
+      "metadata": { "description": "Base URI for linked templates. Change to your fork/storage account." }
+    }
+  },
+  "variables": {
+    "subscriptionId":    "[subscription().subscriptionId]",
+    "tenantId":          "[subscription().tenantId]",
+    "resourceGroupName": "[resourceGroup().name]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-keyvault",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/azuredeploy/keyvault.json')]" },
+        "parameters": {
+          "keyVaultName":        { "value": "[parameters('keyVaultName')]" },
+          "location":            { "value": "[parameters('location')]" },
+          "tenantId":            { "value": "[variables('tenantId')]" },
+          "freshserviceApiKey":  { "value": "[parameters('freshserviceApiKey')]" },
+          "sentinelClientSecret":{ "value": "[parameters('clientSecret')]" },
+          "deployerObjectId":    { "value": "[parameters('deployerObjectId')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-playbook-createticket",
+      "dependsOn": ["deploy-keyvault"],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/playbooks/Sentinel-Freshservice-CreateTicket/azuredeploy.json')]" },
+        "parameters": {
+          "location":            { "value": "[parameters('location')]" },
+          "FreshserviceDomain":  { "value": "[parameters('freshserviceDomain')]" },
+          "DefaultRequesterEmail":{ "value": "[parameters('defaultRequesterEmail')]" },
+          "DefaultGroupId":      { "value": "[parameters('defaultGroupId')]" },
+          "KeyVaultName":        { "value": "[parameters('keyVaultName')]" },
+          "WorkspaceName":       { "value": "[parameters('workspaceName')]" },
+          "SubscriptionId":      { "value": "[variables('subscriptionId')]" },
+          "ResourceGroupName":   { "value": "[variables('resourceGroupName')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-playbook-webhookreceiver",
+      "dependsOn": ["deploy-keyvault"],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/playbooks/Freshservice-Sentinel-WebhookReceiver/azuredeploy.json')]" },
+        "parameters": {
+          "location":            { "value": "[parameters('location')]" },
+          "TenantId":            { "value": "[variables('tenantId')]" },
+          "ClientId":            { "value": "[parameters('clientId')]" },
+          "SubscriptionId":      { "value": "[variables('subscriptionId')]" },
+          "ResourceGroupName":   { "value": "[variables('resourceGroupName')]" },
+          "WorkspaceName":       { "value": "[parameters('workspaceName')]" },
+          "FreshserviceDomain":  { "value": "[parameters('freshserviceDomain')]" },
+          "KeyVaultName":        { "value": "[parameters('keyVaultName')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-playbook-incidentpoller",
+      "dependsOn": ["deploy-keyvault"],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/playbooks/Sentinel-Freshservice-IncidentPoller/azuredeploy.json')]" },
+        "parameters": {
+          "location":                  { "value": "[parameters('location')]" },
+          "TenantId":                  { "value": "[variables('tenantId')]" },
+          "ClientId":                  { "value": "[parameters('clientId')]" },
+          "SubscriptionId":            { "value": "[variables('subscriptionId')]" },
+          "ResourceGroupName":         { "value": "[variables('resourceGroupName')]" },
+          "WorkspaceName":             { "value": "[parameters('workspaceName')]" },
+          "FreshserviceDomain":        { "value": "[parameters('freshserviceDomain')]" },
+          "KeyVaultName":              { "value": "[parameters('keyVaultName')]" },
+          "PollingFrequencyMinutes":   { "value": "[parameters('pollingIntervalMinutes')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-playbook-synccomments",
+      "dependsOn": ["deploy-keyvault"],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/playbooks/Sentinel-Freshservice-SyncComments/azuredeploy.json')]" },
+        "parameters": {
+          "location":                  { "value": "[parameters('location')]" },
+          "TenantId":                  { "value": "[variables('tenantId')]" },
+          "ClientId":                  { "value": "[parameters('clientId')]" },
+          "SubscriptionId":            { "value": "[variables('subscriptionId')]" },
+          "ResourceGroupName":         { "value": "[variables('resourceGroupName')]" },
+          "WorkspaceName":             { "value": "[parameters('workspaceName')]" },
+          "FreshserviceDomain":        { "value": "[parameters('freshserviceDomain')]" },
+          "KeyVaultName":              { "value": "[parameters('keyVaultName')]" },
+          "PollingFrequencyMinutes":   { "value": "[parameters('commentSyncIntervalMinutes')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-kv-rbac-logicapps",
+      "dependsOn": [
+        "deploy-keyvault",
+        "deploy-playbook-createticket",
+        "deploy-playbook-webhookreceiver",
+        "deploy-playbook-incidentpoller",
+        "deploy-playbook-synccomments"
+      ],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/azuredeploy/keyvault.json')]" },
+        "parameters": {
+          "keyVaultName":          { "value": "[parameters('keyVaultName')]" },
+          "location":              { "value": "[parameters('location')]" },
+          "tenantId":              { "value": "[variables('tenantId')]" },
+          "freshserviceApiKey":    { "value": "[parameters('freshserviceApiKey')]" },
+          "sentinelClientSecret":  { "value": "[parameters('clientSecret')]" },
+          "deployerObjectId":      { "value": "[parameters('deployerObjectId')]" },
+          "logicApp1PrincipalId":  { "value": "[reference('deploy-playbook-createticket').outputs.playbookPrincipalId.value]" },
+          "logicApp2PrincipalId":  { "value": "[reference('deploy-playbook-incidentpoller').outputs.principalId.value]" },
+          "logicApp3PrincipalId":  { "value": "[reference('deploy-playbook-webhookreceiver').outputs.principalId.value]" },
+          "logicApp4PrincipalId":  { "value": "[reference('deploy-playbook-synccomments').outputs.principalId.value]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-automation-rules",
+      "dependsOn": ["deploy-playbook-createticket", "deploy-playbook-synccomments"],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/azuredeploy/automationRules.json')]" },
+        "parameters": {
+          "workspaceName":          { "value": "[parameters('workspaceName')]" },
+          "createTicketPlaybookId": { "value": "[reference('deploy-playbook-createticket').outputs.playbookResourceId.value]" },
+          "syncCommentsPlaybookId": { "value": "[reference('deploy-playbook-synccomments').outputs.playbookResourceId.value]" },
+          "syncOnSeverity":         { "value": "[parameters('syncOnSeverity')]" },
+          "incidentTagFilter":      { "value": "[parameters('incidentTagFilter')]" }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "deploy-workbook",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": { "uri": "[concat(parameters('baseTemplateUri'), '/azuredeploy/workbook.json')]" },
+        "parameters": {
+          "location":       { "value": "[parameters('location')]" },
+          "workspaceId":    { "value": "[parameters('workspaceId')]" },
+          "workspaceName":  { "value": "[parameters('workspaceName')]" }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "webhookReceiverUrl": {
+      "type": "string",
+      "value": "[reference('deploy-playbook-webhookreceiver').outputs.webhookUrl.value]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "value": "[reference('deploy-keyvault').outputs.keyVaultUri.value]"
+    },
+    "createTicketPlaybookId": {
+      "type": "string",
+      "value": "[reference('deploy-playbook-createticket').outputs.playbookResourceId.value]"
+    },
+    "nextStep": {
+      "type": "string",
+      "value": "[concat('Deployment complete. Copy the webhookReceiverUrl above into your Freshservice Workflow Automator webhook action. See README for the remaining post-deployment steps.')]"
+    }
+  }
+}

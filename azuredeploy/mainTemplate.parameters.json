@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "workspaceName": {
+      "value": "YOUR-SENTINEL-WORKSPACE"
+    },
+    "workspaceId": {
+      "value": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.OperationalInsights/workspaces/YOUR-WORKSPACE"
+    },
+    "freshserviceDomain": {
+      "value": "yourcompany.freshservice.com"
+    },
+    "freshserviceApiKey": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.KeyVault/vaults/YOUR-KV"
+        },
+        "secretName": "FreshserviceApiKey"
+      }
+    },
+    "clientId": {
+      "value": "YOUR-APP-REGISTRATION-CLIENT-ID"
+    },
+    "clientSecret": {
+      "reference": {
+        "keyVault": {
+          "id": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.KeyVault/vaults/YOUR-KV"
+        },
+        "secretName": "SentinelClientSecret"
+      }
+    },
+    "keyVaultName": {
+      "value": "YOUR-KEY-VAULT-NAME"
+    },
+    "defaultRequesterEmail": {
+      "value": "soc-automation@yourcompany.com"
+    },
+    "sentinelIncidentTag": {
+      "value": "freshservice"
+    },
+    "defaultGroupId": {
+      "value": 0
+    }
+  }
+}

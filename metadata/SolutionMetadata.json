@@ -1,0 +1,34 @@
+{
+  "Name": "MicrosoftSentinelForFreshservice",
+  "Author": "SOC Engineering",
+  "Logo": "<img src=\"https://raw.githubusercontent.com/your-org/sentinel-freshservice/main/images/freshservice-logo.svg\" width=\"75px\" height=\"75px\">",
+  "Description": "The **Microsoft Sentinel Solution for Freshservice** enables bi-directional synchronization between Microsoft Sentinel incidents and Freshservice ITSM tickets.\n\nWhen a Sentinel incident is created or updated, a corresponding Freshservice ticket is automatically created or updated with full entity enrichment, severity mapping, and deep-link back to the Sentinel incident.\n\nWhen a Freshservice ticket is resolved or closed, the corresponding Sentinel incident is automatically closed via webhook callback — maintaining a single source of truth across both platforms.\n\n**Key Capabilities:**\n- Automatic ticket creation from Sentinel incidents\n- Severity → Priority mapping (High=Urgent, Medium=Medium, Low=Low)\n- Entity enrichment (Host, IP, User, URL entities injected into ticket description)\n- Alert product tagging\n- Bidirectional status synchronization via Freshservice webhooks\n- Sentinel incident auto-close when FS ticket is Resolved/Closed\n- Resolution notes written back to Sentinel incident comments\n- Owner assignment synchronization\n- Custom field support (sentinel_incident_id, sentinel_severity, sentinel_workspace)\n\n**Data Connectors:** 0\n**Playbooks:** 4\n**Workbooks:** 1\n**Analytic Rules:** 0",
+  "BasePath": "https://raw.githubusercontent.com/your-org/sentinel-freshservice/main",
+  "Version": "1.0.0",
+  "Metadata": "SolutionMetadata.json",
+  "TemplateSpec": true,
+  "Is1PConnector": false,
+  "publisherId": "your-org",
+  "offerId": "sentinel-freshservice-solution",
+  "providers": ["Freshworks"],
+  "categories": {
+    "domains": ["Security - Automation (SOAR)", "IT Service Management"]
+  },
+  "firstPublishDate": "2024-01-01",
+  "lastPublishDate": "2024-01-01",
+  "support": {
+    "name": "SOC Engineering Team",
+    "email": "soc@yourcompany.com",
+    "tier": "Community",
+    "link": "https://github.com/your-org/sentinel-freshservice/issues"
+  },
+  "Playbooks": [
+    "Playbooks/Sentinel-Freshservice-CreateTicket/azuredeploy.json",
+    "Playbooks/Freshservice-Sentinel-WebhookReceiver/azuredeploy.json",
+    "Playbooks/Sentinel-Freshservice-IncidentPoller/azuredeploy.json",
+    "Playbooks/Sentinel-Freshservice-SyncComments/azuredeploy.json"
+  ],
+  "Workbooks": [
+    "Workbooks/FreshserviceSyncStatus.json"
+  ]
+}

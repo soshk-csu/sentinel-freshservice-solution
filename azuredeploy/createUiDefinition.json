@@ -1,0 +1,272 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": true,
+      "basics": {
+        "description": "<img src='https://raw.githubusercontent.com/your-org/sentinel-freshservice/main/images/freshservice-logo.svg' width='75px' height='75px'><br><br>**Microsoft Sentinel Solution for Freshservice**\n\nThis solution deploys bidirectional synchronization between Microsoft Sentinel and Freshservice ITSM using Azure Logic Apps.\n\n**Components deployed:**\n- 4 × Logic App playbooks\n- 1 × Azure Key Vault\n- 2 × Sentinel Automation Rules\n- 1 × Sentinel Workbook\n\n[Documentation](https://github.com/your-org/sentinel-freshservice-solution) | [Support](https://github.com/your-org/sentinel-freshservice-solution/issues)",
+        "location": {
+          "label": "Location",
+          "toolTip": "Azure region where all resources will be deployed.",
+          "resourceTypes": ["Microsoft.Logic/workflows", "Microsoft.KeyVault/vaults"],
+          "allowedValues": []
+        }
+      }
+    },
+    "basics": [],
+    "steps": [
+      {
+        "name": "sentinel",
+        "label": "Microsoft Sentinel",
+        "elements": [
+          {
+            "name": "workspaceSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Sentinel Workspace",
+            "elements": [
+              {
+                "name": "workspacePicker",
+                "type": "Microsoft.Solutions.ResourceSelector",
+                "label": "Select Sentinel workspace",
+                "resourceType": "Microsoft.OperationalInsights/workspaces",
+                "options": { "filter": { "subscription": "onBasics", "location": "onBasics" } }
+              }
+            ]
+          },
+          {
+            "name": "appRegSection",
+            "type": "Microsoft.Common.Section",
+            "label": "App Registration (for Sentinel API access)",
+            "elements": [
+              {
+                "name": "infoAppReg",
+                "type": "Microsoft.Common.InfoBox",
+                "options": {
+                  "icon": "Info",
+                  "text": "Create an App Registration in Azure AD and assign it the 'Microsoft Sentinel Responder' role on the workspace resource group. See README for step-by-step instructions."
+                }
+              },
+              {
+                "name": "clientId",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Client ID (Application ID)",
+                "placeholder": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                "constraints": {
+                  "required": true,
+                  "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
+                  "validationMessage": "Must be a valid GUID."
+                }
+              },
+              {
+                "name": "clientSecret",
+                "type": "Microsoft.Common.PasswordBox",
+                "label": {
+                  "password": "Client Secret",
+                  "confirmPassword": "Confirm Client Secret"
+                },
+                "constraints": { "required": true }
+              }
+            ]
+          },
+          {
+            "name": "syncSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Sync Settings",
+            "elements": [
+              {
+                "name": "syncSeverity",
+                "type": "Microsoft.Common.DropDown",
+                "label": "Auto-create tickets for severity",
+                "multiselect": true,
+                "defaultValue": ["High", "Medium"],
+                "constraints": {
+                  "allowedValues": [
+                    { "label": "High",          "value": "High" },
+                    { "label": "Medium",        "value": "Medium" },
+                    { "label": "Low",           "value": "Low" },
+                    { "label": "Informational", "value": "Informational" }
+                  ],
+                  "required": true
+                }
+              },
+              {
+                "name": "incidentTagFilter",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Incident tag filter (optional)",
+                "placeholder": "freshservice",
+                "toolTip": "Only sync incidents that have this tag. Leave blank to sync all incidents of the selected severities.",
+                "constraints": { "required": false }
+              },
+              {
+                "name": "pollingInterval",
+                "type": "Microsoft.Common.Slider",
+                "label": "Incident polling interval (minutes)",
+                "toolTip": "How often the poller Logic App checks for new/updated incidents as a fallback.",
+                "min": 1,
+                "max": 60,
+                "step": 1,
+                "defaultValue": 5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "freshservice",
+        "label": "Freshservice",
+        "elements": [
+          {
+            "name": "fsSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Freshservice Connection",
+            "elements": [
+              {
+                "name": "infoFs",
+                "type": "Microsoft.Common.InfoBox",
+                "options": {
+                  "icon": "Info",
+                  "text": "You need a Freshservice API key. Navigate to Freshservice > Profile Settings > API Key to obtain one. Ensure your account has Agent or Admin permissions."
+                }
+              },
+              {
+                "name": "fsDomain",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Freshservice domain",
+                "placeholder": "yourcompany.freshservice.com",
+                "constraints": {
+                  "required": true,
+                  "regex": "^[a-zA-Z0-9-]+\\.freshservice\\.com$",
+                  "validationMessage": "Must be in the format yourcompany.freshservice.com"
+                }
+              },
+              {
+                "name": "fsApiKey",
+                "type": "Microsoft.Common.PasswordBox",
+                "label": {
+                  "password": "Freshservice API Key",
+                  "confirmPassword": "Confirm API Key"
+                },
+                "constraints": { "required": true }
+              }
+            ]
+          },
+          {
+            "name": "fsDefaults",
+            "type": "Microsoft.Common.Section",
+            "label": "Ticket Defaults",
+            "elements": [
+              {
+                "name": "requesterEmail",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Default requester email",
+                "defaultValue": "soc-automation@yourcompany.com",
+                "toolTip": "Email address used as the ticket requester for auto-created tickets.",
+                "constraints": {
+                  "required": true,
+                  "regex": "^[^@]+@[^@]+\\.[^@]+$",
+                  "validationMessage": "Must be a valid email address."
+                }
+              },
+              {
+                "name": "groupId",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Default group ID (0 = unassigned)",
+                "defaultValue": "0",
+                "toolTip": "Freshservice group ID to assign tickets to. Find group IDs via GET /api/v2/groups.",
+                "constraints": {
+                  "required": false,
+                  "regex": "^[0-9]+$",
+                  "validationMessage": "Must be a numeric group ID or 0."
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "keyvault",
+        "label": "Key Vault",
+        "elements": [
+          {
+            "name": "kvSection",
+            "type": "Microsoft.Common.Section",
+            "label": "Secret Storage",
+            "elements": [
+              {
+                "name": "kvChoice",
+                "type": "Microsoft.Common.OptionsGroup",
+                "label": "Key Vault",
+                "defaultValue": "Create new",
+                "constraints": {
+                  "allowedValues": [
+                    { "label": "Create new Key Vault", "value": "new" },
+                    { "label": "Use existing Key Vault", "value": "existing" }
+                  ]
+                }
+              },
+              {
+                "name": "kvName",
+                "type": "Microsoft.Common.TextBox",
+                "label": "Key Vault name",
+                "toolTip": "Globally unique name, 3-24 characters, alphanumeric and hyphens only.",
+                "placeholder": "kv-sentinel-freshservice",
+                "visible": "[equals(steps('keyvault').kvSection.kvChoice, 'new')]",
+                "constraints": {
+                  "required": "[equals(steps('keyvault').kvSection.kvChoice, 'new')]",
+                  "regex": "^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$",
+                  "validationMessage": "3-24 chars, start with letter, alphanumeric and hyphens only."
+                }
+              },
+              {
+                "name": "existingKv",
+                "type": "Microsoft.Solutions.ResourceSelector",
+                "label": "Select existing Key Vault",
+                "resourceType": "Microsoft.KeyVault/vaults",
+                "visible": "[equals(steps('keyvault').kvSection.kvChoice, 'existing')]",
+                "options": { "filter": { "subscription": "onBasics", "location": "onBasics" } }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "review",
+        "label": "Review + Create",
+        "elements": [
+          {
+            "name": "summary",
+            "type": "Microsoft.Common.Section",
+            "label": "Deployment Summary",
+            "elements": [
+              {
+                "name": "summaryText",
+                "type": "Microsoft.Common.InfoBox",
+                "options": {
+                  "icon": "None",
+                  "text": "[concat('**Workspace:** ', steps('sentinel').workspaceSection.workspacePicker.name, '\n\n**Freshservice domain:** ', steps('freshservice').fsSection.fsDomain, '\n\n**Auto-create for severities:** ', string(steps('sentinel').syncSection.syncSeverity), '\n\n**Polling interval:** ', steps('sentinel').syncSection.pollingInterval, ' minutes\n\n**4 Logic Apps + 1 Key Vault + 2 Automation Rules + 1 Workbook will be deployed.**')]"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location":              "[location()]",
+      "workspaceName":         "[steps('sentinel').workspaceSection.workspacePicker.name]",
+      "workspaceId":           "[steps('sentinel').workspaceSection.workspacePicker.id]",
+      "clientId":              "[steps('sentinel').appRegSection.clientId]",
+      "clientSecret":          "[steps('sentinel').appRegSection.clientSecret.password]",
+      "syncOnSeverity":        "[steps('sentinel').syncSection.syncSeverity]",
+      "incidentTagFilter":     "[steps('sentinel').syncSection.incidentTagFilter]",
+      "pollingInterval":       "[steps('sentinel').syncSection.pollingInterval]",
+      "freshserviceDomain":    "[steps('freshservice').fsSection.fsDomain]",
+      "freshserviceApiKey":    "[steps('freshservice').fsSection.fsApiKey.password]",
+      "defaultRequesterEmail": "[steps('freshservice').fsDefaults.requesterEmail]",
+      "defaultGroupId":        "[int(steps('freshservice').fsDefaults.groupId)]",
+      "keyVaultName":          "[if(equals(steps('keyvault').kvSection.kvChoice, 'new'), steps('keyvault').kvSection.kvName, last(split(steps('keyvault').kvSection.existingKv.id, '/')))]"
+    }
+  }
+}

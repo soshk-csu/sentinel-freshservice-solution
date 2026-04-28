@@ -1,0 +1,305 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Sentinel-Freshservice-CreateTicket",
+    "description": "Event-driven Logic App triggered by Microsoft Sentinel incident creation. Creates a Freshservice Incident ticket with full entity enrichment, severity-to-priority mapping, and writes the FS ticket ID back to the Sentinel incident as a tag and comment.",
+    "version": "1.0.0",
+    "lastUpdateTime": "2024-01-01",
+    "tags": ["LogicAppsCustomConnector"]
+  },
+  "parameters": {
+    "PlaybookName": {
+      "type": "string",
+      "defaultValue": "Sentinel-Freshservice-CreateTicket",
+      "metadata": { "description": "Name of the Logic App playbook." }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "FreshserviceDomain": {
+      "type": "string",
+      "metadata": { "description": "e.g. yourcompany.freshservice.com" }
+    },
+    "DefaultRequesterEmail": {
+      "type": "string",
+      "defaultValue": "soc-automation@yourcompany.com"
+    },
+    "DefaultGroupId": {
+      "type": "int",
+      "defaultValue": 0,
+      "metadata": { "description": "Freshservice group ID. 0 = unassigned." }
+    },
+    "KeyVaultName": {
+      "type": "string",
+      "metadata": { "description": "Name of the Azure Key Vault holding FreshserviceApiKey secret." }
+    },
+    "WorkspaceName": {
+      "type": "string",
+      "metadata": { "description": "Sentinel Log Analytics workspace name." }
+    },
+    "SubscriptionId": {
+      "type": "string",
+      "defaultValue": "[subscription().subscriptionId]"
+    },
+    "ResourceGroupName": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().name]"
+    }
+  },
+  "variables": {
+    "AzureSentinelConnectionName": "[concat('azuresentinel-', parameters('PlaybookName'))]",
+    "SentinelApiVersion": "2023-11-01"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/connections",
+      "apiVersion": "2016-06-01",
+      "name": "[variables('AzureSentinelConnectionName')]",
+      "location": "[parameters('location')]",
+      "kind": "V1",
+      "properties": {
+        "displayName": "[variables('AzureSentinelConnectionName')]",
+        "customParameterValues": {},
+        "parameterValueType": "Alternative",
+        "api": {
+          "id": "[concat('/subscriptions/', parameters('SubscriptionId'), '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azuresentinel')]"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('location')]",
+      "identity": { "type": "SystemAssigned" },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/connections', variables('AzureSentinelConnectionName'))]"
+      ],
+      "tags": {
+        "hidden-SentinelTemplateName": "Sentinel-Freshservice-CreateTicket",
+        "hidden-SentinelTemplateVersion": "1.0.0"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "$connections": { "defaultValue": {}, "type": "Object" },
+            "FreshserviceDomain":    { "defaultValue": "[parameters('FreshserviceDomain')]",    "type": "String" },
+            "DefaultRequesterEmail": { "defaultValue": "[parameters('DefaultRequesterEmail')]", "type": "String" },
+            "DefaultGroupId":        { "defaultValue": "[parameters('DefaultGroupId')]",        "type": "Int" },
+            "KeyVaultName":          { "defaultValue": "[parameters('KeyVaultName')]",          "type": "String" },
+            "WorkspaceName":         { "defaultValue": "[parameters('WorkspaceName')]",         "type": "String" },
+            "SubscriptionId":        { "defaultValue": "[parameters('SubscriptionId')]",        "type": "String" },
+            "ResourceGroupName":     { "defaultValue": "[parameters('ResourceGroupName')]",     "type": "String" }
+          },
+          "triggers": {
+            "Microsoft_Sentinel_incident": {
+              "type": "ApiConnectionWebhook",
+              "inputs": {
+                "body": { "callback_url": "@{listCallbackUrl()}" },
+                "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                "path": "/incident-creation"
+              }
+            }
+          },
+          "actions": {
+            "Initialize_fsPriority": {
+              "type": "InitializeVariable",
+              "inputs": { "variables": [{ "name": "fsPriority", "type": "integer", "value": 3 }] }
+            },
+            "Initialize_fsSubject": {
+              "runAfter": { "Initialize_fsPriority": ["Succeeded"] },
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [{
+                  "name": "fsSubject",
+                  "type": "string",
+                  "value": "@concat('[SENTINEL-', triggerBody()?['object']?['properties']?['incidentNumber'], '] ', triggerBody()?['object']?['properties']?['title'])"
+                }]
+              }
+            },
+            "Initialize_entityLines": {
+              "runAfter": { "Initialize_fsSubject": ["Succeeded"] },
+              "type": "InitializeVariable",
+              "inputs": { "variables": [{ "name": "entityLines", "type": "string", "value": "" }] }
+            },
+            "Get_FS_API_Key": {
+              "runAfter": { "Initialize_entityLines": ["Succeeded"] },
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceApiKey?api-version=7.4')",
+                "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+              }
+            },
+            "Map_Severity_to_Priority": {
+              "runAfter": { "Get_FS_API_Key": ["Succeeded"] },
+              "type": "Switch",
+              "expression": "@triggerBody()?['object']?['properties']?['severity']",
+              "cases": {
+                "High": {
+                  "case": "High",
+                  "actions": { "Set_Priority_Urgent": { "type": "SetVariable", "inputs": { "name": "fsPriority", "value": 2 } } }
+                },
+                "Medium": {
+                  "case": "Medium",
+                  "actions": { "Set_Priority_High": { "type": "SetVariable", "inputs": { "name": "fsPriority", "value": 3 } } }
+                },
+                "Low": {
+                  "case": "Low",
+                  "actions": { "Set_Priority_Medium": { "type": "SetVariable", "inputs": { "name": "fsPriority", "value": 4 } } }
+                },
+                "Informational": {
+                  "case": "Informational",
+                  "actions": { "Set_Priority_Low": { "type": "SetVariable", "inputs": { "name": "fsPriority", "value": 4 } } }
+                }
+              },
+              "default": { "actions": {} }
+            },
+            "Build_Entities_HTML": {
+              "runAfter": { "Map_Severity_to_Priority": ["Succeeded"] },
+              "type": "Foreach",
+              "foreach": "@triggerBody()?['object']?['properties']?['relatedEntities']",
+              "actions": {
+                "Append_Entity_Line": {
+                  "type": "AppendToStringVariable",
+                  "inputs": {
+                    "name": "entityLines",
+                    "value": "@concat('<li><b>', item()?['kind'], ':</b> ', coalesce(item()?['properties']?['friendlyName'], item()?['properties']?['address'], item()?['properties']?['hostName'], item()?['properties']?['accountName'], 'N/A'), '</li>')"
+                  }
+                }
+              }
+            },
+            "Check_for_Duplicate_Ticket": {
+              "runAfter": { "Build_Entities_HTML": ["Succeeded"] },
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets?type=Incident&tag=sentinel-inc-', triggerBody()?['object']?['properties']?['incidentNumber'])",
+                "headers": {
+                  "Authorization": "@concat('Basic ', base64(concat(body('Get_FS_API_Key')?['value'], ':X')))"
+                }
+              }
+            },
+            "Skip_If_Duplicate": {
+              "runAfter": { "Check_for_Duplicate_Ticket": ["Succeeded"] },
+              "type": "If",
+              "expression": {
+                "equals": ["@length(body('Check_for_Duplicate_Ticket')?['tickets'])", 0]
+              },
+              "actions": {
+                "Create_Freshservice_Ticket": {
+                  "type": "Http",
+                  "inputs": {
+                    "method": "POST",
+                    "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets')",
+                    "headers": {
+                      "Authorization": "@concat('Basic ', base64(concat(body('Get_FS_API_Key')?['value'], ':X')))",
+                      "Content-Type": "application/json"
+                    },
+                    "body": {
+                      "subject": "@variables('fsSubject')",
+                      "description": "@concat(\n  '<div style=\"font-family:monospace\">',\n  '<h3>&#128721; Microsoft Sentinel Incident</h3>',\n  '<table border=\"1\" cellpadding=\"4\">',\n  '<tr><td><b>Incident #</b></td><td>', triggerBody()?['object']?['properties']?['incidentNumber'], '</td></tr>',\n  '<tr><td><b>Severity</b></td><td>', triggerBody()?['object']?['properties']?['severity'], '</td></tr>',\n  '<tr><td><b>Status</b></td><td>', triggerBody()?['object']?['properties']?['status'], '</td></tr>',\n  '<tr><td><b>Created</b></td><td>', triggerBody()?['object']?['properties']?['createdTimeUtc'], '</td></tr>',\n  '<tr><td><b>Alert Products</b></td><td>', string(triggerBody()?['object']?['properties']?['additionalData']?['alertProductNames']), '</td></tr>',\n  '<tr><td><b>Tactics</b></td><td>', string(triggerBody()?['object']?['properties']?['additionalData']?['tactics']), '</td></tr>',\n  '<tr><td><b>Sentinel URL</b></td><td><a href=\"', triggerBody()?['object']?['properties']?['incidentUrl'], '\">Open in Sentinel</a></td></tr>',\n  '</table>',\n  '<br><b>Description:</b><br>', triggerBody()?['object']?['properties']?['description'],\n  '<br><br><b>Affected Entities:</b><ul>', variables('entityLines'), '</ul>',\n  '<br><small>Auto-created by Microsoft Sentinel &#8594; Freshservice Connector v1.0</small>',\n  '</div>'\n)",
+                      "email": "@parameters('DefaultRequesterEmail')",
+                      "priority": "@variables('fsPriority')",
+                      "status": 2,
+                      "source": 13,
+                      "type": "Incident",
+                      "group_id": "@if(equals(parameters('DefaultGroupId'), 0), null, parameters('DefaultGroupId'))",
+                      "tags": [
+                        "sentinel",
+                        "auto-created",
+                        "@concat('sentinel-inc-', triggerBody()?['object']?['properties']?['incidentNumber'])",
+                        "@concat('severity-', toLower(triggerBody()?['object']?['properties']?['severity']))"
+                      ],
+                      "custom_fields": {
+                        "sentinel_incident_id": "@triggerBody()?['object']?['name']",
+                        "sentinel_incident_number": "@string(triggerBody()?['object']?['properties']?['incidentNumber'])",
+                        "sentinel_severity": "@triggerBody()?['object']?['properties']?['severity']",
+                        "sentinel_workspace": "@parameters('WorkspaceName')"
+                      }
+                    }
+                  }
+                },
+                "Tag_Sentinel_Incident_with_FS_Ticket_ID": {
+                  "runAfter": { "Create_Freshservice_Ticket": ["Succeeded"] },
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "body": {
+                      "incidentArmId": "@triggerBody()?['object']?['id']",
+                      "tagsToAdd": {
+                        "TagsToAdd": [
+                          { "Tag": "@concat('fs-ticket-', body('Create_Freshservice_Ticket')?['ticket']?['id'])" }
+                        ]
+                      }
+                    },
+                    "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                    "method": "post",
+                    "path": "/Incidents/AddTags"
+                  }
+                },
+                "Add_Sentinel_Comment_with_FS_Link": {
+                  "runAfter": { "Tag_Sentinel_Incident_with_FS_Ticket_ID": ["Succeeded"] },
+                  "type": "ApiConnection",
+                  "inputs": {
+                    "body": {
+                      "incidentArmId": "@triggerBody()?['object']?['id']",
+                      "message": "@concat('&#9989; Freshservice ticket created automatically.\n\nTicket ID: ', body('Create_Freshservice_Ticket')?['ticket']?['id'], '\nSubject: ', body('Create_Freshservice_Ticket')?['ticket']?['subject'], '\nStatus: Open\nPriority: ', body('Create_Freshservice_Ticket')?['ticket']?['priority'], '\n\nView ticket: https://', parameters('FreshserviceDomain'), '/helpdesk/tickets/', body('Create_Freshservice_Ticket')?['ticket']?['id'])"
+                    },
+                    "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                    "method": "post",
+                    "path": "/Incidents/Comment"
+                  }
+                }
+              },
+              "else": {
+                "actions": {
+                  "Add_Dedup_Comment": {
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "body": {
+                        "incidentArmId": "@triggerBody()?['object']?['id']",
+                        "message": "@concat('&#9888; Dedup check: A Freshservice ticket already exists for incident #', triggerBody()?['object']?['properties']?['incidentNumber'], '. Skipping creation.')"
+                      },
+                      "host": { "connection": { "name": "@parameters('$connections')['azuresentinel']['connectionId']" } },
+                      "method": "post",
+                      "path": "/Incidents/Comment"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": {
+          "$connections": {
+            "value": {
+              "azuresentinel": {
+                "connectionId": "[resourceId('Microsoft.Web/connections', variables('AzureSentinelConnectionName'))]",
+                "connectionName": "[variables('AzureSentinelConnectionName')]",
+                "id": "[concat('/subscriptions/', parameters('SubscriptionId'), '/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/azuresentinel')]",
+                "connectionProperties": {
+                  "authentication": { "type": "ManagedServiceIdentity" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "playbookResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Logic/workflows', parameters('PlaybookName'))]"
+    },
+    "playbookPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
+  }
+}

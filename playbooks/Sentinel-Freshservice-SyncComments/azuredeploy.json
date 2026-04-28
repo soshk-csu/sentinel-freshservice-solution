@@ -1,0 +1,157 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Sentinel-Freshservice-SyncComments",
+    "description": "Syncs comments added to Sentinel incidents as notes on the corresponding Freshservice ticket, and syncs public Freshservice notes back to Sentinel incident comments. Runs on a schedule.",
+    "version": "1.0.0"
+  },
+  "parameters": {
+    "PlaybookName": { "type": "string", "defaultValue": "Sentinel-Freshservice-SyncComments" },
+    "location": { "type": "string", "defaultValue": "[resourceGroup().location]" },
+    "TenantId": { "type": "string" },
+    "ClientId": { "type": "string" },
+    "SubscriptionId": { "type": "string", "defaultValue": "[subscription().subscriptionId]" },
+    "ResourceGroupName": { "type": "string", "defaultValue": "[resourceGroup().name]" },
+    "WorkspaceName": { "type": "string" },
+    "FreshserviceDomain": { "type": "string" },
+    "KeyVaultName": { "type": "string" },
+    "PollingFrequencyMinutes": { "type": "int", "defaultValue": 10 }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Logic/workflows",
+      "apiVersion": "2019-05-01",
+      "name": "[parameters('PlaybookName')]",
+      "location": "[parameters('location')]",
+      "identity": { "type": "SystemAssigned" },
+      "tags": {
+        "hidden-SentinelTemplateName": "Sentinel-Freshservice-SyncComments",
+        "hidden-SentinelTemplateVersion": "1.0.0"
+      },
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {
+            "TenantId": { "defaultValue": "[parameters('TenantId')]", "type": "String" },
+            "ClientId": { "defaultValue": "[parameters('ClientId')]", "type": "String" },
+            "SubscriptionId": { "defaultValue": "[parameters('SubscriptionId')]", "type": "String" },
+            "ResourceGroupName": { "defaultValue": "[parameters('ResourceGroupName')]", "type": "String" },
+            "WorkspaceName": { "defaultValue": "[parameters('WorkspaceName')]", "type": "String" },
+            "FreshserviceDomain": { "defaultValue": "[parameters('FreshserviceDomain')]", "type": "String" },
+            "KeyVaultName": { "defaultValue": "[parameters('KeyVaultName')]", "type": "String" }
+          },
+          "triggers": {
+            "Recurrence_Sync_Comments": {
+              "type": "Recurrence",
+              "recurrence": {
+                "frequency": "Minute",
+                "interval": "[parameters('PollingFrequencyMinutes')]"
+              }
+            }
+          },
+          "actions": {
+            "Get_Bearer_Token": {
+              "type": "Http",
+              "inputs": {
+                "method": "POST",
+                "uri": "@concat('https://login.microsoftonline.com/', parameters('TenantId'), '/oauth2/v2.0/token')",
+                "headers": { "Content-Type": "application/x-www-form-urlencoded" },
+                "body": "@concat('grant_type=client_credentials&client_id=', parameters('ClientId'), '&client_secret=', body('Fetch_ClientSecret')?['value'], '&scope=https://management.azure.com/.default')"
+              }
+            },
+            "List_Active_Sentinel_Incidents_with_FS_Tags": {
+              "runAfter": { "Get_Bearer_Token": ["Succeeded"] },
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://management.azure.com/subscriptions/', parameters('SubscriptionId'), '/resourceGroups/', parameters('ResourceGroupName'), '/providers/Microsoft.OperationalInsights/workspaces/', parameters('WorkspaceName'), '/providers/Microsoft.SecurityInsights/incidents?api-version=2023-11-01&$filter=properties/status eq ''Active''&$top=50')",
+                "headers": {
+                  "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])"
+                }
+              }
+            },
+            "For_Each_Active_Incident": {
+              "runAfter": { "List_Active_Sentinel_Incidents_with_FS_Tags": ["Succeeded"] },
+              "type": "Foreach",
+              "foreach": "@body('List_Active_Sentinel_Incidents_with_FS_Tags')?['value']",
+              "actions": {
+                "Find_FS_Ticket_Tag": {
+                  "type": "Filter",
+                  "inputs": {
+                    "from": "@item()?['properties']?['labels']",
+                    "where": "@startsWith(item()?['displayName'], 'fs-ticket-')"
+                  }
+                },
+                "If_FS_Tag_Found": {
+                  "runAfter": { "Find_FS_Ticket_Tag": ["Succeeded"] },
+                  "type": "If",
+                  "expression": { "greater": ["@length(body('Find_FS_Ticket_Tag'))", 0] },
+                  "actions": {
+                    "Get_FS_Ticket_ID": {
+                      "type": "Compose",
+                      "inputs": "@replace(first(body('Find_FS_Ticket_Tag'))?['displayName'], 'fs-ticket-', '')"
+                    },
+                    "Get_Sentinel_Comments": {
+                      "runAfter": { "Get_FS_Ticket_ID": ["Succeeded"] },
+                      "type": "Http",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@concat('https://management.azure.com/subscriptions/', parameters('SubscriptionId'), '/resourceGroups/', parameters('ResourceGroupName'), '/providers/Microsoft.OperationalInsights/workspaces/', parameters('WorkspaceName'), '/providers/Microsoft.SecurityInsights/incidents/', item()?['name'], '/comments?api-version=2023-11-01')",
+                        "headers": { "Authorization": "@concat('Bearer ', body('Get_Bearer_Token')?['access_token'])" }
+                      }
+                    },
+                    "Get_FS_Ticket_Notes": {
+                      "runAfter": { "Get_Sentinel_Comments": ["Succeeded"] },
+                      "type": "Http",
+                      "inputs": {
+                        "method": "GET",
+                        "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets/', outputs('Get_FS_Ticket_ID'), '/conversations')",
+                        "headers": {
+                          "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))"
+                        }
+                      }
+                    },
+                    "For_Each_New_Sentinel_Comment": {
+                      "runAfter": { "Get_FS_Ticket_Notes": ["Succeeded"] },
+                      "type": "Foreach",
+                      "foreach": "@body('Get_Sentinel_Comments')?['value']",
+                      "actions": {
+                        "Check_Comment_Not_Already_Synced": {
+                          "type": "If",
+                          "expression": {
+                            "not": { "contains": ["@string(body('Get_FS_Ticket_Notes')?['conversations'])", "@item()?['name']"] }
+                          },
+                          "actions": {
+                            "Add_Sentinel_Comment_as_FS_Note": {
+                              "type": "Http",
+                              "inputs": {
+                                "method": "POST",
+                                "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets/', outputs('Get_FS_Ticket_ID'), '/notes')",
+                                "headers": {
+                                  "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))",
+                                  "Content-Type": "application/json"
+                                },
+                                "body": {
+                                  "body": "@concat('[Synced from Sentinel] ', item()?['properties']?['message'])",
+                                  "private": true,
+                                  "notify_emails": []
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "title": "Sentinel-Freshservice-AutomationRules",
+    "description": "Deploys Microsoft Sentinel Automation Rules that trigger the Freshservice playbooks on incident creation and update."
+  },
+  "parameters": {
+    "workspaceName":           { "type": "string" },
+    "subscriptionId":          { "type": "string", "defaultValue": "[subscription().subscriptionId]" },
+    "resourceGroupName":       { "type": "string", "defaultValue": "[resourceGroup().name]" },
+    "createTicketPlaybookId":  { "type": "string", "metadata": { "description": "Resource ID of Sentinel-Freshservice-CreateTicket Logic App." } },
+    "syncCommentsPlaybookId":  { "type": "string", "metadata": { "description": "Resource ID of Sentinel-Freshservice-SyncComments Logic App." } },
+    "syncOnSeverity": {
+      "type": "array",
+      "defaultValue": ["High", "Medium"],
+      "allowedValues": ["High", "Medium", "Low", "Informational"],
+      "metadata": { "description": "Severity levels that trigger automatic ticket creation." }
+    },
+    "incidentTagFilter": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": { "description": "Optional: only process incidents with this tag. Leave empty to process all incidents." }
+    }
+  },
+  "variables": {
+    "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+    "sentinelResourceId": "[concat(variables('workspaceResourceId'), '/providers/Microsoft.SecurityInsights')]",
+    "ruleId_CreateTicket": "[guid(parameters('workspaceName'), 'FreshserviceCreateTicket')]",
+    "ruleId_TaggedOnly": "[guid(parameters('workspaceName'), 'FreshserviceTaggedOnly')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces/providers/automationRules",
+      "apiVersion": "2023-11-01",
+      "name": "[concat(parameters('workspaceName'), '/Microsoft.SecurityInsights/', variables('ruleId_CreateTicket'))]",
+      "properties": {
+        "displayName": "Create Freshservice Ticket on High/Medium Incidents",
+        "order": 10,
+        "triggeringLogic": {
+          "isEnabled": true,
+          "triggersOn": "Incidents",
+          "triggersWhen": "Created",
+          "conditions": [
+            {
+              "conditionType": "Property",
+              "conditionProperties": {
+                "propertyName": "IncidentSeverity",
+                "operator": "Contains",
+                "propertyValues": "[parameters('syncOnSeverity')]"
+              }
+            }
+          ]
+        },
+        "actions": [
+          {
+            "order": 1,
+            "actionType": "RunPlaybook",
+            "actionConfiguration": {
+              "tenantId": "[subscription().tenantId]",
+              "logicAppResourceId": "[parameters('createTicketPlaybookId')]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "condition": "[not(empty(parameters('incidentTagFilter')))]",
+      "type": "Microsoft.OperationalInsights/workspaces/providers/automationRules",
+      "apiVersion": "2023-11-01",
+      "name": "[concat(parameters('workspaceName'), '/Microsoft.SecurityInsights/', variables('ruleId_TaggedOnly'))]",
+      "properties": {
+        "displayName": "[concat('Create Freshservice Ticket - Tagged [', parameters('incidentTagFilter'), '] Only')]",
+        "order": 9,
+        "triggeringLogic": {
+          "isEnabled": false,
+          "triggersOn": "Incidents",
+          "triggersWhen": "Created",
+          "conditions": [
+            {
+              "conditionType": "Property",
+              "conditionProperties": {
+                "propertyName": "IncidentLabel",
+                "operator": "Contains",
+                "propertyValues": ["[parameters('incidentTagFilter')]"]
+              }
+            }
+          ]
+        },
+        "actions": [
+          {
+            "order": 1,
+            "actionType": "RunPlaybook",
+            "actionConfiguration": {
+              "tenantId": "[subscription().tenantId]",
+              "logicAppResourceId": "[parameters('createTicketPlaybookId')]"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "automationRuleId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces/providers/automationRules', parameters('workspaceName'), 'Microsoft.SecurityInsights', variables('ruleId_CreateTicket'))]"
+    }
+  }
+}

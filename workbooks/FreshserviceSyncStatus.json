@@ -1,0 +1,105 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# Microsoft Sentinel — Freshservice Sync Status\n\nThis workbook monitors the bidirectional synchronization between Microsoft Sentinel incidents and Freshservice ITSM tickets."
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "timerange",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 86400000 },
+            "typeSettings": { "selectableValues": [
+              { "durationMs": 3600000 },
+              { "durationMs": 86400000 },
+              { "durationMs": 604800000 },
+              { "durationMs": 2592000000 }
+            ] }
+          }
+        ]
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| where TimeGenerated {TimeRange}\n| where Labels has 'freshservice' or Labels has_any('fs-ticket-')\n| summarize\n    Total = count(),\n    Synced = countif(Labels has 'fs-ticket-'),\n    Unsynced = countif(not(Labels has 'fs-ticket-'))\n| extend SyncRate = round(100.0 * Synced / Total, 1)",
+        "size": 4,
+        "title": "Sync Coverage",
+        "timeContext": { "durationMs": 0, "parameter": "TimeRange" },
+        "queryType": 0,
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": { "columnMatch": "Column1", "formatter": 1 },
+          "leftContent": { "columnMatch": "Column2", "formatter": 12 }
+        }
+      },
+      "name": "sync-coverage"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| where TimeGenerated {TimeRange}\n| summarize\n    Count = count() by Severity, bin(TimeGenerated, 1h)\n| order by TimeGenerated desc",
+        "size": 0,
+        "title": "Incidents by Severity Over Time",
+        "timeContext": { "durationMs": 0, "parameter": "TimeRange" },
+        "queryType": 0,
+        "visualization": "barchart"
+      },
+      "name": "incidents-severity"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| where TimeGenerated {TimeRange}\n| where Labels has 'fs-ticket-'\n| extend FreshserviceTicketId = extract('fs-ticket-(\\\\d+)', 1, tostring(Labels))\n| project\n    IncidentNumber,\n    Title,\n    Severity,\n    Status,\n    FreshserviceTicketId,\n    CreatedTime,\n    LastModifiedTime\n| order by LastModifiedTime desc\n| take 100",
+        "size": 0,
+        "title": "Incidents Synced to Freshservice",
+        "timeContext": { "durationMs": 0, "parameter": "TimeRange" },
+        "queryType": 0,
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            { "columnMatch": "Severity", "formatter": 18, "formatOptions": { "thresholdsOptions": "colors", "thresholdsGrid": [
+              { "operator": "==", "thresholdValue": "High", "representation": "red", "text": "High" },
+              { "operator": "==", "thresholdValue": "Medium", "representation": "orange", "text": "Medium" },
+              { "operator": "==", "thresholdValue": "Low", "representation": "yellow", "text": "Low" },
+              { "operator": "Default", "representation": "blue", "text": "{0}" }
+            ]}},
+            { "columnMatch": "FreshserviceTicketId", "formatter": 7, "formatOptions": { "linkTarget": "Url", "linkLabel": "INC-{0}" } }
+          ]
+        }
+      },
+      "name": "synced-incidents-table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "SecurityIncident\n| where TimeGenerated {TimeRange}\n| where Status == 'Closed'\n| where ClosedTime > ago(1d)\n| summarize ClosedBySentinel = countif(not(Labels has 'fs-ticket-')), ClosedViaFreshservice = countif(Labels has 'fs-ticket-')",
+        "size": 4,
+        "title": "Incident Closure Source",
+        "timeContext": { "durationMs": 0, "parameter": "TimeRange" },
+        "queryType": 0,
+        "visualization": "piechart"
+      },
+      "name": "closure-source"
+    }
+  ],
+  "styleSettings": {},
+  "$schema": "https://github.com/Microsoft/Application-Insights-Workbooks/blob/master/schema/workbook.json"
+}
