@@ -169,7 +169,8 @@ Grant the Logic Apps managed identities access after deployment (Step 6).
 
 ### Option A — Azure Portal (One-click deploy)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fsoshk-csu%2Fsentinel-freshservice%2Fmain%2Fazuredeploy%2FmainTemplate.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https://github.com/soshk-csu/sentinel-freshservice-solution/blob/main/azuredeploy/mainTemplate.json)
+
 
 ### Option B — Azure CLI
 
@@ -298,7 +299,7 @@ Copy the `value` URL and paste it into the Freshservice Workflow Automator webho
 
 ## Contributing
 
-Issues and pull requests welcome at [github.com/your-org/sentinel-freshservice-solution](https://github.com/your-org/sentinel-freshservice-solution).
+Issues and pull requests welcome at [github.com/your-org/sentinel-freshservice-solution](https://github.com/soshk-csu/sentinel-freshservice-solution).
 
 ## License
 
