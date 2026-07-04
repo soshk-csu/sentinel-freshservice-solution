@@ -168,7 +168,7 @@ Grant the Logic Apps managed identities access after deployment (Step 6).
 
 ### Option A — Azure Portal (One-click deploy)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/refs/heads/main/azuredeploy/orchestrator.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#blade/Microsoft_Azure_CreateUIDef/CustomDeploymentBlade/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fsoshk-csu%2Fsentinel-freshservice-solution%2Fmain%2Fazuredeploy%2Forchestrator.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Fsoshk-csu%2Fsentinel-freshservice-solution%2Fmain%2Fazuredeploy%2FcreateUiDefinition.json)
 
 > The portal wizard (`createUiDefinition.json`) cannot look up your signed-in user's Object ID, so the Key Vault
 > Administrator role isn't auto-assigned to you when deploying this way. Grant yourself **Key Vault Secrets Officer**
