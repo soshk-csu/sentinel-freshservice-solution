@@ -249,7 +249,7 @@ After deployment, retrieve the webhook receiver URL:
 az logic workflow trigger list-callback-url \
   --resource-group YOUR-RG \
   --workflow-name Freshservice-Sentinel-WebhookReceiver \
-  --trigger-name HTTP_Webhook_from_Freshservice
+  --trigger-name HTTP_Webhook_Freshservice
 ```
 
 Copy the `value` URL and paste it into the Freshservice Workflow Automator webhook action from Step 3.

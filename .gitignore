@@ -1,0 +1,4 @@
+# Local deployment artifacts - contain live secrets/signed URLs, never commit
+deployment-outputs.json
+azuredeploy/myparams.json
+*.local.json
