@@ -134,7 +134,7 @@
                   "actions": {
                     "Extract_FS_Ticket_ID": {
                       "type": "Compose",
-                      "inputs": "@replace(first(filter(item()?['properties']?['labels'], @equals(startsWith(item()?['displayName'], 'fs-ticket-'), true)))?['displayName'], 'fs-ticket-', '')"
+                      "inputs": "@replace(first(filter(item()?['properties']?['labels'], equals(startsWith(item()?['displayName'], 'fs-ticket-'), true)))?['displayName'], 'fs-ticket-', '')"
                     },
                     "Update_Existing_FS_Ticket": {
                       "runAfter": { "Extract_FS_Ticket_ID": ["Succeeded"] },

@@ -45,7 +45,7 @@
               "conditionType": "Property",
               "conditionProperties": {
                 "propertyName": "IncidentSeverity",
-                "operator": "Contains",
+                "operator": "Equals",
                 "propertyValues": "[parameters('syncOnSeverity')]"
               }
             }

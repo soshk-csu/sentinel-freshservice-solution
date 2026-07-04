@@ -89,6 +89,14 @@
             }
           },
           "actions": {
+            "Initialize_canonicalStatus": {
+              "type": "InitializeVariable",
+              "inputs": {
+                "variables": [
+                  { "name": "canonicalStatus", "type": "string", "value": "" }
+                ]
+              }
+            },
             "Fetch_ClientSecret": {
               "type": "Http",
               "inputs": {
@@ -173,15 +181,10 @@
                       "else": {
                         "actions": {
                           "Normalize_FS_Status": {
-                            "type": "InitializeVariable",
+                            "type": "SetVariable",
                             "inputs": {
-                              "variables": [
-                                {
-                                  "name": "canonicalStatus",
-                                  "type": "string",
-                                  "value": "@{if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'Resolved'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '4')), 'resolved', if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'Closed'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '5')), 'closed', if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'In Progress'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '6')), 'inprogress', if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'Pending'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '3')), 'pending', 'other'))))}"
-                                }
-                              ]
+                              "name": "canonicalStatus",
+                              "value": "@{if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'Resolved'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '4')), 'resolved', if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'Closed'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '5')), 'closed', if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'In Progress'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '6')), 'inprogress', if(or(equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], 'Pending'), equals(triggerBody()?['freshdesk_webhook']?['ticket_status'], '3')), 'pending', 'other'))))}"
                             }
                           },
                           "Route_by_FS_Status": {
