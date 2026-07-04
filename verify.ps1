@@ -104,12 +104,12 @@ step "Checking Freshservice custom fields"
 try {
     $credentials = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("${FreshserviceApiKey}:X"))
     $fields = Invoke-RestMethod `
-        -Uri "https://$FreshserviceDomain/api/v2/ticket_fields" `
+        -Uri "https://$FreshserviceDomain/api/v2/ticket_form_fields" `
         -Headers @{ Authorization = "Basic $credentials" } `
         -Method GET
-    $fieldNames = $fields.ticket_fields | Where-Object { $_.name -like "cf_sentinel_*" } | Select-Object -ExpandProperty name
-    foreach ($cf in @("cf_sentinel_incident_id", "cf_sentinel_incident_number", "cf_sentinel_severity", "cf_sentinel_workspace")) {
-        Check ($cf -in $fieldNames) "Custom field '$cf' exists" "Custom field '$cf' MISSING — add it in Freshservice Admin > Ticket Fields"
+    $fieldNames = $fields.ticket_fields | Select-Object -ExpandProperty name
+    foreach ($cf in @("sentinel_incident_id", "sentinel_incident", "sentinel_severity", "sentinel_workspace")) {
+        Check ($cf -in $fieldNames) "Custom field '$cf' exists" "Custom field '$cf' MISSING or misnamed — check Admin > Global Settings > Service Management > Field Manager > Ticket Fields (Freshservice generates the internal name from the label and strips invalid characters, so it may not match what you typed)"
     }
 } catch {
     warn "Could not verify custom fields: $($_.Exception.Message)"

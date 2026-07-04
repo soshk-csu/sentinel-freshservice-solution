@@ -72,7 +72,7 @@
                         "ticket_priority":                     { "type": "string" },
                         "ticket_resolution_notes":             { "type": "string" },
                         "ticket_cf_sentinel_incident_id":      { "type": "string" },
-                        "ticket_cf_sentinel_incident_number":  { "type": "string" },
+                        "ticket_cf_sentinel_incident":         { "type": "string" },
                         "ticket_cf_sentinel_workspace":        { "type": "string" },
                         "ticket_responder_email":              { "type": "string" },
                         "ticket_responder_name":               { "type": "string" },

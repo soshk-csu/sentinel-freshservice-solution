@@ -189,9 +189,11 @@ cat <<EOF
 
 📋 NEXT STEPS:
 
-1. FRESHSERVICE CUSTOM FIELDS (Admin > Ticket Fields):
-   Add to Incident type: sentinel_incident_id, sentinel_incident_number,
+1. FRESHSERVICE CUSTOM FIELDS (Admin > Global Settings > Service Management > Field Manager > Ticket Fields):
+   Add to Incident type: sentinel_incident_id, sentinel_incident (labeled "Sentinel Incident #"),
    sentinel_severity, sentinel_workspace
+   WARNING: Freshservice generates the internal field name from the label and strips characters like '#'.
+   Verify actual names with GET /api/v2/ticket_form_fields before deploying - see README Step 2.
 
 2. FRESHSERVICE WEBHOOK (Admin > Workflow Automator):
    Event: Ticket Updated | Condition: sentinel_incident_id not empty

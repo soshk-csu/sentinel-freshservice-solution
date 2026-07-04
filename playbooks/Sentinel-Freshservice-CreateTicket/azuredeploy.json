@@ -181,7 +181,7 @@
                 "method": "GET",
                 "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets/filter')",
                 "queries": {
-                  "query": "@concat('\"(cf_sentinel_incident_number:', triggerBody()?['object']?['properties']?['incidentNumber'], ')\"')"
+                  "query": "@concat('\"(cf_sentinel_incident:', triggerBody()?['object']?['properties']?['incidentNumber'], ')\"')"
                 },
                 "headers": {
                   "Authorization": "@concat('Basic ', base64(concat(body('Get_FS_API_Key')?['value'], ':X')))"
@@ -221,7 +221,7 @@
                       ],
                       "custom_fields": {
                         "sentinel_incident_id": "@triggerBody()?['object']?['name']",
-                        "sentinel_incident_number": "@string(triggerBody()?['object']?['properties']?['incidentNumber'])",
+                        "sentinel_incident": "@string(triggerBody()?['object']?['properties']?['incidentNumber'])",
                         "sentinel_severity": "@triggerBody()?['object']?['properties']?['severity']",
                         "sentinel_workspace": "@parameters('WorkspaceName')"
                       }

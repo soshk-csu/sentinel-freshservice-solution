@@ -105,11 +105,25 @@ Add the following custom fields to the **Incident** ticket type in Freshservice:
 | Field Label | Field Name (API) | Type | Description |
 |-------------|-----------------|------|-------------|
 | Sentinel Incident ID | `sentinel_incident_id` | Single line text | Azure resource ID of the Sentinel incident |
-| Sentinel Incident # | `sentinel_incident_number` | Number | Human-readable incident number |
+| Sentinel Incident # | `sentinel_incident` | Number | Human-readable incident number |
 | Sentinel Severity | `sentinel_severity` | Single line text | High / Medium / Low / Informational |
 | Sentinel Workspace | `sentinel_workspace` | Single line text | Name of the Sentinel workspace |
 
-> Note the exact API field names — they must match the `custom_fields` keys in the Logic App payloads.
+> **Don't assume the API field name matches the label you typed.** Freshservice auto-generates the internal
+> `name` from the label and silently strips characters that aren't valid in an identifier — e.g. the label
+> "Sentinel Incident #" generates the internal name `sentinel_incident` (the `#` is dropped), **not**
+> `sentinel_incident_number`. This isn't hypothetical — it's exactly what happened during testing. After creating
+> all 4 fields, confirm the real generated names before deploying anything:
+> ```powershell
+> $domain = "yourcompany.freshservice.com"
+> $apiKey = "your-api-key"
+> $cred = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes("${apiKey}:X"))
+> $response = Invoke-RestMethod -Uri "https://$domain/api/v2/ticket_form_fields" -Headers @{ Authorization = "Basic $cred" }
+> $response.ticket_fields | Where-Object { $_.label -like "*Sentinel*" } | Select-Object name, label, type
+> ```
+> If any generated name doesn't match the table above, either fix the field's label and re-check (deleting and
+> recreating the field changes its internal name — editing the label alone does not), or update the `cf_...`
+> references throughout the playbooks and `metadata/FreshserviceConfig.json` to match what's actually there.
 
 ---
 

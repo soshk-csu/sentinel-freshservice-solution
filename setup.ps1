@@ -224,11 +224,14 @@ $summary = @"
 📋 NEXT STEPS (required to complete setup):
 
 1. FRESHSERVICE CUSTOM FIELDS (if not done):
-   Admin > Ticket Fields > Add these 4 fields to Incident type:
+   Admin > Global Settings > Service Management > Field Manager > Ticket Fields > Add these 4 fields to Incident type:
      - sentinel_incident_id    (Single line text)
-     - sentinel_incident_number (Number)
+     - sentinel_incident       (Number, labeled "Sentinel Incident #")
      - sentinel_severity        (Single line text)
      - sentinel_workspace       (Single line text)
+   WARNING: Freshservice auto-generates the internal field name from the label and strips invalid characters
+   (e.g. '#'). Verify the actual generated names with GET /api/v2/ticket_form_fields before relying on them -
+   do not assume they match what you typed. See README Step 2 for the verification script.
 
 2. FRESHSERVICE WEBHOOK AUTOMATOR:
    Admin > Workflow Automator > New Rule:

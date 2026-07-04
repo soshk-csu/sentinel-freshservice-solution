@@ -39,7 +39,7 @@
                 "ticket_subject":                     "{{ticket.subject}}",
                 "ticket_resolution_notes":            "{{ticket.resolution_notes}}",
                 "ticket_cf_sentinel_incident_id":     "{{ticket.cf.sentinel_incident_id}}",
-                "ticket_cf_sentinel_incident_number": "{{ticket.cf.sentinel_incident_number}}",
+                "ticket_cf_sentinel_incident":        "{{ticket.cf.sentinel_incident}}",
                 "ticket_cf_sentinel_workspace":       "{{ticket.cf.sentinel_workspace}}",
                 "ticket_responder_email":             "{{ticket.agent.email}}",
                 "ticket_responder_name":              "{{ticket.agent.name}}",
@@ -108,12 +108,12 @@
         "description": "Full Azure resource ID of the linked Microsoft Sentinel incident. Set automatically by the connector. Do not edit manually."
       },
       {
-        "label": "Sentinel Incident Number",
-        "name": "sentinel_incident_number",
+        "label": "Sentinel Incident #",
+        "name": "sentinel_incident",
         "type": "custom_number",
         "required": false,
         "visible_in_portal": false,
-        "description": "Human-readable Sentinel incident number (integer). Used for display and deduplication."
+        "description": "Human-readable Sentinel incident number (integer). Used for display and deduplication. NOTE: Freshservice auto-generates the internal 'name' from the label and strips special characters like '#' - always confirm the actual generated name via GET /api/v2/ticket_form_fields after creating the field rather than assuming it matches the label."
       },
       {
         "label": "Sentinel Severity",
@@ -146,7 +146,7 @@
       { "sentinel_field": "properties.severity == Informational",           "fs_field": "priority",                        "transform": "4 (Medium)" },
       { "sentinel_field": "properties.status == Active",                    "fs_field": "status",                          "transform": "2 (Open)" },
       { "sentinel_field": "properties.name",                               "fs_field": "custom_fields.sentinel_incident_id",         "transform": "Direct copy" },
-      { "sentinel_field": "properties.incidentNumber",                     "fs_field": "custom_fields.sentinel_incident_number",     "transform": "Direct copy" },
+      { "sentinel_field": "properties.incidentNumber",                     "fs_field": "custom_fields.sentinel_incident",            "transform": "Direct copy" },
       { "sentinel_field": "properties.severity",                           "fs_field": "custom_fields.sentinel_severity",            "transform": "Direct copy" },
       { "sentinel_field": "workspaceName (parameter)",                     "fs_field": "custom_fields.sentinel_workspace",           "transform": "Direct copy" },
       { "sentinel_field": "properties.relatedEntities[].kind + friendlyName", "fs_field": "description (entity list)",    "transform": "HTML <ul> list appended to description" },

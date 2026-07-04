@@ -162,7 +162,7 @@
                           "method": "GET",
                           "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets/filter')",
                           "queries": {
-                            "query": "@concat('\"(cf_sentinel_incident_number:', item()?['properties']?['incidentNumber'], ')\"')"
+                            "query": "@concat('\"(cf_sentinel_incident:', item()?['properties']?['incidentNumber'], ')\"')"
                           },
                           "headers": {
                             "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))"
@@ -195,7 +195,7 @@
                                 "tags": ["sentinel", "poller-sync", "@concat('sentinel-inc-', item()?['properties']?['incidentNumber'])"],
                                 "custom_fields": {
                                   "sentinel_incident_id": "@item()?['name']",
-                                  "sentinel_incident_number": "@item()?['properties']?['incidentNumber']",
+                                  "sentinel_incident": "@item()?['properties']?['incidentNumber']",
                                   "sentinel_severity": "@item()?['properties']?['severity']"
                                 }
                               }
