@@ -89,49 +89,32 @@
             }
           },
           "actions": {
-            "Get_Secrets_Parallel": {
-              "type": "Parallel",
-              "branches": {
-                "Get_ClientSecret": {
-                  "actions": {
-                    "Fetch_ClientSecret": {
-                      "type": "Http",
-                      "inputs": {
-                        "method": "GET",
-                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/SentinelClientSecret?api-version=7.4')",
-                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
-                      }
-                    }
-                  }
-                },
-                "Get_FreshApiKey": {
-                  "actions": {
-                    "Fetch_FreshApiKey": {
-                      "type": "Http",
-                      "inputs": {
-                        "method": "GET",
-                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceApiKey?api-version=7.4')",
-                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
-                      }
-                    }
-                  }
-                },
-                "Get_WebhookSecret": {
-                  "actions": {
-                    "Fetch_WebhookSecret": {
-                      "type": "Http",
-                      "inputs": {
-                        "method": "GET",
-                        "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceWebhookSecret?api-version=7.4')",
-                        "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
-                      }
-                    }
-                  }
-                }
+            "Fetch_ClientSecret": {
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/SentinelClientSecret?api-version=7.4')",
+                "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+              }
+            },
+            "Fetch_FreshApiKey": {
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceApiKey?api-version=7.4')",
+                "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
+              }
+            },
+            "Fetch_WebhookSecret": {
+              "type": "Http",
+              "inputs": {
+                "method": "GET",
+                "uri": "@concat('https://', parameters('KeyVaultName'), '.vault.azure.net/secrets/FreshserviceWebhookSecret?api-version=7.4')",
+                "authentication": { "type": "ManagedServiceIdentity", "audience": "https://vault.azure.net" }
               }
             },
             "Validate_Webhook_Auth": {
-              "runAfter": { "Get_Secrets_Parallel": ["Succeeded"] },
+              "runAfter": { "Fetch_ClientSecret": ["Succeeded"], "Fetch_FreshApiKey": ["Succeeded"], "Fetch_WebhookSecret": ["Succeeded"] },
               "type": "If",
               "expression": {
                 "equals": [
