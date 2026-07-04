@@ -160,7 +160,10 @@
                         "type": "Http",
                         "inputs": {
                           "method": "GET",
-                          "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets?type=Incident&tag=sentinel-inc-', item()?['properties']?['incidentNumber'])",
+                          "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets/filter')",
+                          "queries": {
+                            "query": "@concat('\"(cf_sentinel_incident_number:', item()?['properties']?['incidentNumber'], ')\"')"
+                          },
                           "headers": {
                             "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))"
                           }
