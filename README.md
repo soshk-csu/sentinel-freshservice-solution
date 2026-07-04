@@ -96,7 +96,10 @@ This grants the Logic Apps permission to call the Sentinel Management API.
 
 Add the following custom fields to the **Incident** ticket type in Freshservice:
 
-1. Go to **Admin → Ticket Fields** (under Service Management)
+1. Go to **Admin → Global Settings → Service Management → Field Manager → Ticket Fields**
+   (if you don't see this, your Admin role needs the **"Manage Fields and Tags"** permission enabled; if your
+   account uses Workspaces, ticket fields are configured per-workspace and the workspace must be fully set up and
+   published first)
 2. Add the following fields:
 
 | Field Label | Field Name (API) | Type | Description |
