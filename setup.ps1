@@ -47,7 +47,7 @@ param(
     [string]$SyncOnSeverity = "High,Medium",
     [string]$IncidentTagFilter = "",
     [int]$PollingIntervalMinutes = 5,
-    [string]$TemplateBaseUri = "https://raw.githubusercontent.com/your-org/sentinel-freshservice-solution/main",
+    [string]$TemplateBaseUri = "https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/main",
     [string]$AppRegistrationName = "SentinelFreshserviceConnector"
 )
 

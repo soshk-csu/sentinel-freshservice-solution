@@ -6,7 +6,7 @@
     "config": {
       "isWizard": true,
       "basics": {
-        "description": "<img src='https://raw.githubusercontent.com/your-org/sentinel-freshservice/main/images/freshservice-logo.svg' width='75px' height='75px'><br><br>**Microsoft Sentinel Solution for Freshservice**\n\nThis solution deploys bidirectional synchronization between Microsoft Sentinel and Freshservice ITSM using Azure Logic Apps.\n\n**Components deployed:**\n- 4 × Logic App playbooks\n- 1 × Azure Key Vault\n- 2 × Sentinel Automation Rules\n- 1 × Sentinel Workbook\n\n[Documentation](https://github.com/your-org/sentinel-freshservice-solution) | [Support](https://github.com/your-org/sentinel-freshservice-solution/issues)",
+        "description": "**Microsoft Sentinel Solution for Freshservice**\n\nThis solution deploys bidirectional synchronization between Microsoft Sentinel and Freshservice ITSM using Azure Logic Apps.\n\n**Components deployed:**\n- 4 × Logic App playbooks\n- 1 × Azure Key Vault\n- 2 × Sentinel Automation Rules\n- 1 × Sentinel Workbook\n\n[Documentation](https://github.com/soshk-csu/sentinel-freshservice-solution) | [Support](https://github.com/soshk-csu/sentinel-freshservice-solution/issues)",
         "location": {
           "label": "Location",
           "toolTip": "Azure region where all resources will be deployed.",

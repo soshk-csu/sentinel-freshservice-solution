@@ -24,7 +24,7 @@
     "commentSyncIntervalMinutes": { "type": "int", "defaultValue": 10 },
     "baseTemplateUri": {
       "type": "string",
-      "defaultValue": "https://raw.githubusercontent.com/your-org/sentinel-freshservice-solution/main",
+      "defaultValue": "https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/main",
       "metadata": { "description": "Base URI for linked templates. Change to your fork/storage account." }
     }
   },

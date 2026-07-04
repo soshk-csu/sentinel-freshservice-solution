@@ -18,7 +18,7 @@ SYNC_SEVERITY='["High","Medium"]'
 TAG_FILTER=""
 POLLING_INTERVAL=5
 APP_REG_NAME="SentinelFreshserviceConnector"
-TEMPLATE_BASE_URI="https://raw.githubusercontent.com/your-org/sentinel-freshservice-solution/main"
+TEMPLATE_BASE_URI="https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/main"
 
 usage() {
   cat <<EOF

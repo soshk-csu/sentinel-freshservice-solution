@@ -306,7 +306,7 @@ Matches `metadata/FreshserviceConfig.json`'s `fs_status_to_sentinel_status` tabl
 
 ## Contributing
 
-Issues and pull requests welcome at [github.com/your-org/sentinel-freshservice-solution](https://github.com/your-org/sentinel-freshservice-solution).
+Issues and pull requests welcome at [github.com/soshk-csu/sentinel-freshservice-solution](https://github.com/soshk-csu/sentinel-freshservice-solution).
 
 ## License
 
