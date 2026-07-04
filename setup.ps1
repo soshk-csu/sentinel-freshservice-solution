@@ -153,30 +153,50 @@ if ($existingRole) {
 # ─── 6. Deploy ARM orchestrator ───────────────────────────────────────────────
 Write-Step "Deploying ARM solution (this takes 3-5 minutes)..."
 $severityArray = $SyncOnSeverity.Split(",") | ForEach-Object { $_.Trim() }
-$severityJson  = ($severityArray | ConvertTo-Json -Compress)
 
-$deployOutput = az deployment group create `
-    --resource-group $ResourceGroupName `
-    --template-uri "$TemplateBaseUri/azuredeploy/orchestrator.json" `
-    --parameters location="$Location" `
-                 workspaceName="$WorkspaceName" `
-                 workspaceId="$workspaceId" `
-                 clientId="$clientId" `
-                 clientSecret="$clientSecret" `
-                 freshserviceDomain="$FreshserviceDomain" `
-                 freshserviceApiKey="$FreshserviceApiKey" `
-                 defaultRequesterEmail="$DefaultRequesterEmail" `
-                 keyVaultName="$KeyVaultName" `
-                 deployerObjectId="$currentUser" `
-                 syncOnSeverity="$severityJson" `
-                 incidentTagFilter="$IncidentTagFilter" `
-                 pollingIntervalMinutes=$PollingIntervalMinutes `
-    --query "properties.outputs" `
-    -o json 2>&1
+# Use a parameters file rather than inline --parameters key=value pairs.
+# On Windows, az.cmd is a batch-file wrapper that re-parses arguments through
+# cmd.exe, which strips the inner double-quotes from inline JSON (e.g. an
+# array parameter like ["High","Medium"] arrives at ARM as [High,Medium],
+# which fails to parse as JSON). A parameters file avoids that entirely.
+$armParameters = [ordered]@{
+    location                = @{ value = $Location }
+    workspaceName            = @{ value = $WorkspaceName }
+    workspaceId              = @{ value = $workspaceId }
+    clientId                 = @{ value = $clientId }
+    clientSecret             = @{ value = $clientSecret }
+    freshserviceDomain       = @{ value = $FreshserviceDomain }
+    freshserviceApiKey       = @{ value = $FreshserviceApiKey }
+    defaultRequesterEmail    = @{ value = $DefaultRequesterEmail }
+    keyVaultName             = @{ value = $KeyVaultName }
+    deployerObjectId         = @{ value = $currentUser }
+    syncOnSeverity           = @{ value = $severityArray }
+    incidentTagFilter        = @{ value = $IncidentTagFilter }
+    pollingIntervalMinutes   = @{ value = $PollingIntervalMinutes }
+}
+$armParametersFile = [ordered]@{
+    '$schema'      = "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#"
+    contentVersion = "1.0.0.0"
+    parameters     = $armParameters
+}
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host $deployOutput -ForegroundColor Red
-    throw "ARM deployment failed. See above for details."
+$paramsFilePath = Join-Path ([System.IO.Path]::GetTempPath()) "sentinel-fs-deploy-params-$(Get-Random).json"
+$armParametersFile | ConvertTo-Json -Depth 10 | Set-Content -Path $paramsFilePath -Encoding utf8
+
+try {
+    $deployOutput = az deployment group create `
+        --resource-group $ResourceGroupName `
+        --template-uri "$TemplateBaseUri/azuredeploy/orchestrator.json" `
+        --parameters "@$paramsFilePath" `
+        --query "properties.outputs" `
+        -o json 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $deployOutput -ForegroundColor Red
+        throw "ARM deployment failed. See above for details."
+    }
+} finally {
+    Remove-Item -Path $paramsFilePath -ErrorAction SilentlyContinue
 }
 
 $outputs = $deployOutput | ConvertFrom-Json
