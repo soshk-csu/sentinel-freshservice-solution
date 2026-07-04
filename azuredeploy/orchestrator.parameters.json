@@ -14,7 +14,7 @@
     "freshserviceApiKey": {
       "reference": {
         "keyVault": {
-          "id": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.KeyVault/vaults/YOUR-KV"
+          "id": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.KeyVault/vaults/YOUR-BOOTSTRAP-KV"
         },
         "secretName": "FreshserviceApiKey"
       }
@@ -25,7 +25,7 @@
     "clientSecret": {
       "reference": {
         "keyVault": {
-          "id": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.KeyVault/vaults/YOUR-KV"
+          "id": "/subscriptions/YOUR-SUB-ID/resourceGroups/YOUR-RG/providers/Microsoft.KeyVault/vaults/YOUR-BOOTSTRAP-KV"
         },
         "secretName": "SentinelClientSecret"
       }
@@ -33,14 +33,29 @@
     "keyVaultName": {
       "value": "YOUR-KEY-VAULT-NAME"
     },
+    "deployerObjectId": {
+      "value": "YOUR-OBJECT-ID"
+    },
     "defaultRequesterEmail": {
       "value": "soc-automation@yourcompany.com"
     },
-    "sentinelIncidentTag": {
-      "value": "freshservice"
-    },
     "defaultGroupId": {
       "value": 0
+    },
+    "syncOnSeverity": {
+      "value": ["High", "Medium"]
+    },
+    "incidentTagFilter": {
+      "value": ""
+    },
+    "pollingIntervalMinutes": {
+      "value": 5
+    },
+    "commentSyncIntervalMinutes": {
+      "value": 10
+    },
+    "baseTemplateUri": {
+      "value": "https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/main"
     }
   }
 }

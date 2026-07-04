@@ -17,7 +17,7 @@
     "defaultRequesterEmail": { "type": "string", "defaultValue": "soc-automation@yourcompany.com" },
     "defaultGroupId":        { "type": "int",    "defaultValue": 0 },
     "keyVaultName":          { "type": "string" },
-    "deployerObjectId":      { "type": "string", "metadata": { "description": "Object ID of the deploying user for Key Vault Administrator role." } },
+    "deployerObjectId":      { "type": "string", "defaultValue": "", "metadata": { "description": "Object ID of the deploying user for Key Vault Administrator role. Leave blank when deploying from the Azure portal wizard (it cannot look this up); pass it explicitly from setup.ps1/setup.sh." } },
     "syncOnSeverity":        { "type": "array",  "defaultValue": ["High", "Medium"] },
     "incidentTagFilter":     { "type": "string", "defaultValue": "" },
     "pollingIntervalMinutes":{ "type": "int",    "defaultValue": 5 },
@@ -172,7 +172,6 @@
         "parameters": {
           "workspaceName":          { "value": "[parameters('workspaceName')]" },
           "createTicketPlaybookId": { "value": "[reference('deploy-playbook-createticket').outputs.playbookResourceId.value]" },
-          "syncCommentsPlaybookId": { "value": "[reference('deploy-playbook-synccomments').outputs.playbookResourceId.value]" },
           "syncOnSeverity":         { "value": "[parameters('syncOnSeverity')]" },
           "incidentTagFilter":      { "value": "[parameters('incidentTagFilter')]" }
         }

@@ -44,8 +44,8 @@ This solution enables SOC teams using Freshservice as their ITSM to:
 |-----------|------|---------|
 | Playbook 1 | `Sentinel-Freshservice-CreateTicket` | Event-driven: creates FS ticket on incident creation |
 | Playbook 2 | `Sentinel-Freshservice-IncidentPoller` | Schedule-driven: polls Sentinel every 5 min for missed incidents |
-| Playbook 3 | `Freshservice-Sentinel-WebhookReceiver` | Receives FS webhook and updates/closes Sentinel incident |
-| Playbook 4 | `Sentinel-Freshservice-SyncComments` | Syncs comments/notes in both directions every 10 min |
+| Playbook 3 | `Freshservice-Sentinel-WebhookReceiver` | Receives FS webhooks (status change and note-added), authenticated via Basic Auth against `FreshserviceWebhookSecret`. Updates/closes the Sentinel incident, or mirrors a new FS note as a Sentinel comment |
+| Playbook 4 | `Sentinel-Freshservice-SyncComments` | Schedule-driven (`commentSyncIntervalMinutes`, default 10 min): polls Sentinel comments on FS-linked incidents and mirrors new ones as FS ticket notes |
 | Workbook | `FreshserviceSyncStatus` | Monitors sync coverage, rates, and closure source |
 
 ---
@@ -110,33 +110,32 @@ Add the following custom fields to the **Incident** ticket type in Freshservice:
 
 ---
 
-## Step 3: Configure the Freshservice Webhook
+## Step 3: Configure the Freshservice Webhooks
 
-Set up an automation rule in Freshservice to call back to the Logic App whenever a ticket status changes.
+Set up **two** Workflow Automator rules in Freshservice so both status changes and new notes call back to
+`Freshservice-Sentinel-WebhookReceiver`. The complete, ready-to-copy rule bodies live in
+[`metadata/FreshserviceConfig.json`](metadata/FreshserviceConfig.json) under `automator_rules` — use those verbatim
+rather than retyping them, since the playbook's trigger schema is written to match those payloads exactly (including
+`ticket_responder_name`, `ticket_priority`, `ticket_subject`, and `ticket_url`, which a shorter hand-written payload
+would omit).
 
-1. Go to **Admin → Workflow Automator** (or **Supervisor Rules**)
-2. Create a new rule:
+1. Go to **Admin → Workflow Automator**
+2. Create rule 1 — **"Sentinel Connector — Ticket Status to Sentinel"**:
    - **Event:** Ticket Updated
    - **Condition:** Custom field `sentinel_incident_id` is not empty
-   - **Action:** Trigger Webhook
-     - **Request type:** POST
-     - **URL:** *(paste the webhook URL from Step 5 output)*
-     - **Content type:** application/json
-     - **Encoding:** JSON
-     - **Content:**
-       ```json
-       {
-         "freshdesk_webhook": {
-           "ticket_id": "{{ticket.id}}",
-           "ticket_status": "{{ticket.status}}",
-           "ticket_resolution_notes": "{{ticket.resolution_notes}}",
-           "ticket_cf_sentinel_incident_id": "{{ticket.cf.sentinel_incident_id}}",
-           "ticket_cf_sentinel_incident_number": "{{ticket.cf.sentinel_incident_number}}",
-           "ticket_responder_email": "{{ticket.agent.email}}"
-         }
-       }
-       ```
-3. Save the rule and set it to **Active**
+   - **Action:** Trigger Webhook → POST → *(webhook URL from Step 5/8 output)* → JSON body from
+     `metadata/FreshserviceConfig.json` → `automator_rules[0].actions[0].config.body`
+   - **Requires Authentication:** enabled, Basic Auth, username = `freshservice-webhook` (or whatever you set
+     `WebhookAuthUsername` to), password = the `FreshserviceWebhookSecret` value from Key Vault
+3. Create rule 2 — **"Sentinel Connector — New Note to Sentinel Comment"**:
+   - **Event:** Note Added, **Condition:** `sentinel_incident_id` is not empty AND note is public
+   - **Action:** same webhook URL and auth as rule 1, JSON body from `automator_rules[1].actions[0].config.body`
+4. Save both rules and set them to **Active**
+
+> **Verify before relying on auto-close:** it isn't confirmed whether `{{ticket.status}}` renders as text
+> ("Resolved") or the numeric status code ("4") in your tenant. `Freshservice-Sentinel-WebhookReceiver` matches both
+> forms (see `Normalize_FS_Status`), but you should still trigger a real status change during Step 8 testing and
+> confirm in the Logic App run history that `canonicalStatus` resolves to the expected value rather than `other`.
 
 ---
 
@@ -169,24 +168,27 @@ Grant the Logic Apps managed identities access after deployment (Step 6).
 
 ### Option A — Azure Portal (One-click deploy)
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https://github.com/soshk-csu/sentinel-freshservice-solution/blob/main/azuredeploy/mainTemplate.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/refs/heads/main/azuredeploy/orchestrator.json)
 
+> The portal wizard (`createUiDefinition.json`) cannot look up your signed-in user's Object ID, so the Key Vault
+> Administrator role isn't auto-assigned to you when deploying this way. Grant yourself **Key Vault Secrets Officer**
+> (or Administrator) on the created vault afterward if you need to inspect secrets from the portal.
 
 ### Option B — Azure CLI
 
 ```bash
 # Clone the solution
-git clone https://github.com/your-org/sentinel-freshservice-solution.git
+git clone https://github.com/soshk-csu/sentinel-freshservice-solution.git
 cd sentinel-freshservice-solution
 
 # Edit parameters
-cp azuredeploy/mainTemplate.parameters.json azuredeploy/myparams.json
-# Edit myparams.json with your values
+cp azuredeploy/orchestrator.parameters.json azuredeploy/myparams.json
+# Edit myparams.json with your values, including deployerObjectId (az ad signed-in-user show --query id -o tsv)
 
 # Deploy
 az deployment group create \
   --resource-group YOUR-RESOURCE-GROUP \
-  --template-file azuredeploy/mainTemplate.json \
+  --template-file azuredeploy/orchestrator.json \
   --parameters @azuredeploy/myparams.json
 ```
 
@@ -265,12 +267,15 @@ Copy the `value` URL and paste it into the Freshservice Workflow Automator webho
 
 ## Status Mapping (Freshservice → Sentinel)
 
+Matches `metadata/FreshserviceConfig.json`'s `fs_status_to_sentinel_status` table. The webhook receiver's
+`Normalize_FS_Status` step matches either the numeric code or the text label for each row.
+
 | Freshservice Status | Sentinel Incident Status |
 |---------------------|--------------------------|
 | Resolved (4) | Closed (TruePositive) |
 | Closed (5) | Closed (TruePositive) |
-| In Progress (3) | Comment added |
-| Pending (6) | Comment added |
+| Pending (3) | Comment added |
+| In Progress (6) | Comment added + owner synced |
 
 ---
 
@@ -279,7 +284,8 @@ Copy the `value` URL and paste it into the Freshservice Workflow Automator webho
 - Solution works per Sentinel workspace; multi-workspace requires separate deployments
 - Freshservice domain separation is not supported (single instance only)
 - Logic Apps Consumption plan has a 90-day run history limit
-- Comment sync is polling-based (10 min latency); not real-time
+- Freshservice → Sentinel comment sync is event-driven (near real-time, via the `note_added` webhook rule).
+  Sentinel → Freshservice comment sync is polling-based (`commentSyncIntervalMinutes`, default 10 min)
 - Attachment sync is not supported in this version
 
 ---
@@ -291,15 +297,16 @@ Copy the `value` URL and paste it into the Freshservice Workflow Automator webho
 | Ticket not created | Automation rule not triggered | Check Sentinel Automation rules are enabled |
 | 401 on Freshservice API | API key wrong or expired | Verify Key Vault secret value |
 | 401 on Sentinel API | Client secret expired | Rotate App Registration secret, update Key Vault |
-| Sentinel not closing | Webhook URL wrong in FS | Re-run Step 8 and update Freshservice automator |
-| Duplicate tickets | Poller + trigger both firing | Add tag condition to Automation Rule or disable poller |
+| 401 from the webhook receiver itself | Freshservice webhook auth doesn't match `FreshserviceWebhookSecret` | Re-check the "Requires Authentication" username/password on both automator rules against the Key Vault secret |
+| Sentinel not closing | Webhook URL wrong in FS, or `canonicalStatus` resolves to `other` | Re-run Step 8, update the automator webhook URL, and check the Logic App run history for the resolved `canonicalStatus` value |
+| Duplicate tickets | Poller and event-driven trigger both firing before the first ticket's tag propagates | Both playbooks now dedup by the `sentinel-inc-<number>` tag before creating; if it still happens, increase `pollingIntervalMinutes` or disable the poller |
 | `sentinel_incident_id` missing | Custom fields not created | Complete Step 2 |
 
 ---
 
 ## Contributing
 
-Issues and pull requests welcome at [github.com/your-org/sentinel-freshservice-solution](https://github.com/soshk-csu/sentinel-freshservice-solution).
+Issues and pull requests welcome at [github.com/your-org/sentinel-freshservice-solution](https://github.com/your-org/sentinel-freshservice-solution).
 
 ## License
 

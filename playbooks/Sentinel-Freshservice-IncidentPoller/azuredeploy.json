@@ -169,30 +169,50 @@
                   },
                   "else": {
                     "actions": {
-                      "Create_New_FS_Ticket_for_Incident": {
+                      "Check_for_Duplicate_Ticket": {
                         "type": "Http",
                         "inputs": {
-                          "method": "POST",
-                          "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets')",
+                          "method": "GET",
+                          "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets?type=Incident&tag=sentinel-inc-', item()?['properties']?['incidentNumber'])",
                           "headers": {
-                            "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))",
-                            "Content-Type": "application/json"
-                          },
-                          "body": {
-                            "subject": "@concat('[SENTINEL-', item()?['properties']?['incidentNumber'], '] ', item()?['properties']?['title'])",
-                            "description": "@concat('<b>Sentinel Incident (Poller sync)</b><br><b>Severity:</b> ', item()?['properties']?['severity'], '<br><b>Incident URL:</b> <a href=\"', item()?['properties']?['incidentUrl'], '\">', item()?['properties']?['incidentUrl'], '</a><br><br>', item()?['properties']?['description'])",
-                            "email": "soc-automation@yourcompany.com",
-                            "priority": 3,
-                            "status": 2,
-                            "type": "Incident",
-                            "tags": ["sentinel", "poller-sync"],
-                            "custom_fields": {
-                              "sentinel_incident_id": "@item()?['name']",
-                              "sentinel_incident_number": "@item()?['properties']?['incidentNumber']",
-                              "sentinel_severity": "@item()?['properties']?['severity']"
-                            }
+                            "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))"
                           }
                         }
+                      },
+                      "Skip_If_Duplicate": {
+                        "runAfter": { "Check_for_Duplicate_Ticket": ["Succeeded"] },
+                        "type": "If",
+                        "expression": {
+                          "equals": ["@length(body('Check_for_Duplicate_Ticket')?['tickets'])", 0]
+                        },
+                        "actions": {
+                          "Create_New_FS_Ticket_for_Incident": {
+                            "type": "Http",
+                            "inputs": {
+                              "method": "POST",
+                              "uri": "@concat('https://', parameters('FreshserviceDomain'), '/api/v2/tickets')",
+                              "headers": {
+                                "Authorization": "@concat('Basic ', base64(concat(body('Fetch_FreshApiKey')?['value'], ':X')))",
+                                "Content-Type": "application/json"
+                              },
+                              "body": {
+                                "subject": "@concat('[SENTINEL-', item()?['properties']?['incidentNumber'], '] ', item()?['properties']?['title'])",
+                                "description": "@concat('<b>Sentinel Incident (Poller sync)</b><br><b>Severity:</b> ', item()?['properties']?['severity'], '<br><b>Incident URL:</b> <a href=\"', item()?['properties']?['incidentUrl'], '\">', item()?['properties']?['incidentUrl'], '</a><br><br>', item()?['properties']?['description'])",
+                                "email": "soc-automation@yourcompany.com",
+                                "priority": 3,
+                                "status": 2,
+                                "type": "Incident",
+                                "tags": ["sentinel", "poller-sync", "@concat('sentinel-inc-', item()?['properties']?['incidentNumber'])"],
+                                "custom_fields": {
+                                  "sentinel_incident_id": "@item()?['name']",
+                                  "sentinel_incident_number": "@item()?['properties']?['incidentNumber']",
+                                  "sentinel_severity": "@item()?['properties']?['severity']"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "else": { "actions": {} }
                       }
                     }
                   }
@@ -203,5 +223,15 @@
         }
       }
     }
-  ]
+  ],
+  "outputs": {
+    "playbookResourceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Logic/workflows', parameters('PlaybookName'))]"
+    },
+    "principalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Logic/workflows', parameters('PlaybookName')), '2019-05-01', 'Full').identity.principalId]"
+    }
+  }
 }

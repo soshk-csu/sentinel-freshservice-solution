@@ -254,19 +254,21 @@
       }
     ],
     "outputs": {
-      "location":              "[location()]",
-      "workspaceName":         "[steps('sentinel').workspaceSection.workspacePicker.name]",
-      "workspaceId":           "[steps('sentinel').workspaceSection.workspacePicker.id]",
-      "clientId":              "[steps('sentinel').appRegSection.clientId]",
-      "clientSecret":          "[steps('sentinel').appRegSection.clientSecret.password]",
-      "syncOnSeverity":        "[steps('sentinel').syncSection.syncSeverity]",
-      "incidentTagFilter":     "[steps('sentinel').syncSection.incidentTagFilter]",
-      "pollingInterval":       "[steps('sentinel').syncSection.pollingInterval]",
-      "freshserviceDomain":    "[steps('freshservice').fsSection.fsDomain]",
-      "freshserviceApiKey":    "[steps('freshservice').fsSection.fsApiKey.password]",
-      "defaultRequesterEmail": "[steps('freshservice').fsDefaults.requesterEmail]",
-      "defaultGroupId":        "[int(steps('freshservice').fsDefaults.groupId)]",
-      "keyVaultName":          "[if(equals(steps('keyvault').kvSection.kvChoice, 'new'), steps('keyvault').kvSection.kvName, last(split(steps('keyvault').kvSection.existingKv.id, '/')))]"
+      "location":                   "[location()]",
+      "workspaceName":              "[steps('sentinel').workspaceSection.workspacePicker.name]",
+      "workspaceId":                "[steps('sentinel').workspaceSection.workspacePicker.id]",
+      "clientId":                   "[steps('sentinel').appRegSection.clientId]",
+      "clientSecret":               "[steps('sentinel').appRegSection.clientSecret.password]",
+      "syncOnSeverity":             "[steps('sentinel').syncSection.syncSeverity]",
+      "incidentTagFilter":          "[steps('sentinel').syncSection.incidentTagFilter]",
+      "pollingIntervalMinutes":     "[steps('sentinel').syncSection.pollingInterval]",
+      "commentSyncIntervalMinutes": 10,
+      "freshserviceDomain":         "[steps('freshservice').fsSection.fsDomain]",
+      "freshserviceApiKey":         "[steps('freshservice').fsSection.fsApiKey.password]",
+      "defaultRequesterEmail":      "[steps('freshservice').fsDefaults.requesterEmail]",
+      "defaultGroupId":             "[int(steps('freshservice').fsDefaults.groupId)]",
+      "keyVaultName":               "[if(equals(steps('keyvault').kvSection.kvChoice, 'new'), steps('keyvault').kvSection.kvName, last(split(steps('keyvault').kvSection.existingKv.id, '/')))]",
+      "baseTemplateUri":            "https://raw.githubusercontent.com/soshk-csu/sentinel-freshservice-solution/main"
     }
   }
 }

@@ -10,7 +10,6 @@
     "subscriptionId":          { "type": "string", "defaultValue": "[subscription().subscriptionId]" },
     "resourceGroupName":       { "type": "string", "defaultValue": "[resourceGroup().name]" },
     "createTicketPlaybookId":  { "type": "string", "metadata": { "description": "Resource ID of Sentinel-Freshservice-CreateTicket Logic App." } },
-    "syncCommentsPlaybookId":  { "type": "string", "metadata": { "description": "Resource ID of Sentinel-Freshservice-SyncComments Logic App." } },
     "syncOnSeverity": {
       "type": "array",
       "defaultValue": ["High", "Medium"],

@@ -157,8 +157,8 @@
     "freshservice_to_sentinel": [
       { "fs_field": "status == Resolved (4)",                "sentinel_field": "properties.status",               "transform": "Closed" },
       { "fs_field": "status == Closed (5)",                  "sentinel_field": "properties.status",               "transform": "Closed" },
-      { "fs_field": "status == In Progress (3)",             "sentinel_field": "properties.status",               "transform": "Active + comment added" },
-      { "fs_field": "status == Pending (6)",                 "sentinel_field": "properties.status",               "transform": "Active + comment added" },
+      { "fs_field": "status == Pending (3)",                 "sentinel_field": "properties.status",               "transform": "Active + comment added" },
+      { "fs_field": "status == In Progress (6)",             "sentinel_field": "properties.status",               "transform": "Active + comment added" },
       { "fs_field": "ticket_resolution_notes",               "sentinel_field": "properties.classificationComment","transform": "Appended to close comment" },
       { "fs_field": "ticket_responder_email",                "sentinel_field": "properties.owner.email",          "transform": "Direct copy on In Progress event" },
       { "fs_field": "note.body (public notes)",              "sentinel_field": "incidents/{id}/comments",         "transform": "Posted as Sentinel incident comment" }

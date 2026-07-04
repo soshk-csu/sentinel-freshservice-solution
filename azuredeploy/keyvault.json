@@ -31,11 +31,12 @@
     "webhookSecret": {
       "type": "securestring",
       "defaultValue": "[newGuid()]",
-      "metadata": { "description": "HMAC signing secret shared with Freshservice webhook automations. Auto-generated if left blank." }
+      "metadata": { "description": "Basic Auth password shared with Freshservice's Workflow Automator 'Requires Authentication' webhook setting (username is the WebhookAuthUsername playbook parameter). Auto-generated if left blank." }
     },
     "deployerObjectId": {
       "type": "string",
-      "metadata": { "description": "Object ID of the user/service-principal running this deployment, granted Key Vault Administrator role for initial setup." }
+      "defaultValue": "",
+      "metadata": { "description": "Object ID of the user/service-principal running this deployment, granted Key Vault Administrator role for initial setup. Leave blank to skip (e.g. portal wizard deploys that cannot look this up)." }
     },
     "logicApp1PrincipalId": {
       "type": "string",
@@ -117,6 +118,7 @@
       }
     },
     {
+      "condition": "[not(empty(parameters('deployerObjectId')))]",
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
       "name": "[guid(parameters('keyVaultName'), parameters('deployerObjectId'), 'kvadmin')]",
